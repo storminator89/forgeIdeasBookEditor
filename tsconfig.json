@@ -1,0 +1,3 @@
+{
+  "extends": "@bucherstellung/config/tsconfig.base.json"
+}
