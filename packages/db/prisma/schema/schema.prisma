@@ -1,9 +1,272 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../generated"
+  provider     = "prisma-client"
+  output       = "../generated"
   moduleFormat = "esm"
 }
 
 datasource db {
   provider = "sqlite"
+}
+
+// ============================================
+// BOOK - Hauptentität für ein Buchprojekt
+// ============================================
+model Book {
+  id             String   @id @default(cuid())
+  title          String
+  author         String?
+  description    String?
+  genre          String?
+  targetAudience String?
+  writingStyle   String?
+  language       String   @default("de")
+  coverUrl       String?
+  hideCoverText  Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  chapters      Chapter[]
+  characters    Character[]
+  plotPoints    PlotPoint[]
+  worldElements WorldElement[]
+  aiSettings    AISettings?
+
+  @@map("books")
+}
+
+// ============================================
+// CHAPTER - Kapitel eines Buches
+// ============================================
+model Chapter {
+  id         String   @id @default(cuid())
+  bookId     String
+  orderIndex Int      @default(0)
+  title      String
+  content    String   @default("") // Rich-Text JSON (TipTap format)
+  summary    String?
+  notes      String?
+  wordCount  Int      @default(0)
+  status     String   @default("draft") // draft, in_progress, review, completed
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  book              Book               @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  imagePlaceholders ImagePlaceholder[]
+  chapterCharacters ChapterCharacter[]
+  chapterPlotPoints ChapterPlotPoint[]
+
+  @@index([bookId])
+  @@index([orderIndex])
+  @@map("chapters")
+}
+
+// ============================================
+// CHARACTER - Charaktere im Buch
+// ============================================
+model Character {
+  id          String   @id @default(cuid())
+  bookId      String
+  name        String
+  role        String   @default("supporting") // protagonist, antagonist, supporting, minor
+  description String?
+  backstory   String?
+  personality String?
+  appearance  String?
+  motivation  String?
+  arc         String? // Charakterentwicklung
+  notes       String?
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  book              Book                @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  chapterCharacters ChapterCharacter[]
+  relationsFrom     CharacterRelation[] @relation("FromCharacter")
+  relationsTo       CharacterRelation[] @relation("ToCharacter")
+  plotInvolvements  PlotCharacter[]
+
+  @@index([bookId])
+  @@map("characters")
+}
+
+// ============================================
+// CHARACTER_RELATION - Beziehungen zwischen Charakteren
+// ============================================
+model CharacterRelation {
+  id                 String   @id @default(cuid())
+  characterId        String
+  relatedCharacterId String
+  relationType       String // family, friend, enemy, romantic, colleague, rival, mentor, etc.
+  description        String?
+  createdAt          DateTime @default(now())
+
+  // Relations
+  character        Character @relation("FromCharacter", fields: [characterId], references: [id], onDelete: Cascade)
+  relatedCharacter Character @relation("ToCharacter", fields: [relatedCharacterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, relatedCharacterId])
+  @@index([characterId])
+  @@index([relatedCharacterId])
+  @@map("character_relations")
+}
+
+// ============================================
+// CHAPTER_CHARACTER - Zuordnung Kapitel zu Charaktere
+// ============================================
+model ChapterCharacter {
+  id          String @id @default(cuid())
+  chapterId   String
+  characterId String
+  prominence  String @default("mentioned") // featured, mentioned, cameo
+
+  // Relations
+  chapter   Chapter   @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([chapterId, characterId])
+  @@index([chapterId])
+  @@index([characterId])
+  @@map("chapter_characters")
+}
+
+// ============================================
+// PLOT_POINT - Handlungspunkte und Story-Elemente
+// ============================================
+model PlotPoint {
+  id          String   @id @default(cuid())
+  bookId      String
+  title       String
+  description String?
+  type        String   @default("event") // hook, rising_action, climax, falling_action, resolution, subplot, event
+  orderIndex  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  book              Book               @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  chapterPlotPoints ChapterPlotPoint[]
+  characters        PlotCharacter[]
+
+  @@index([bookId])
+  @@index([orderIndex])
+  @@map("plot_points")
+}
+
+// ============================================
+// PLOT_CHARACTER - Charaktere in Handlungspunkten
+// ============================================
+model PlotCharacter {
+  id          String @id @default(cuid())
+  plotPointId String
+  characterId String
+  role        String @default("involved") // central, involved, affected
+
+  // Relations
+  plotPoint PlotPoint @relation(fields: [plotPointId], references: [id], onDelete: Cascade)
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([plotPointId, characterId])
+  @@index([plotPointId])
+  @@index([characterId])
+  @@map("plot_characters")
+}
+
+// ============================================
+// CHAPTER_PLOT_POINT - Zuordnung Kapitel zu Handlungspunkte
+// ============================================
+model ChapterPlotPoint {
+  id          String @id @default(cuid())
+  chapterId   String
+  plotPointId String
+
+  // Relations
+  chapter   Chapter   @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  plotPoint PlotPoint @relation(fields: [plotPointId], references: [id], onDelete: Cascade)
+
+  @@unique([chapterId, plotPointId])
+  @@index([chapterId])
+  @@index([plotPointId])
+  @@map("chapter_plot_points")
+}
+
+// ============================================
+// WORLD_ELEMENT - Weltelemente (Orte, Gegenstände, Konzepte)
+// ============================================
+model WorldElement {
+  id          String   @id @default(cuid())
+  bookId      String
+  name        String
+  type        String   @default("location") // location, item, concept, organization, magic_system, technology
+  description String?
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@index([bookId])
+  @@index([type])
+  @@map("world_elements")
+}
+
+// ============================================
+// IMAGE_PLACEHOLDER - Platzhalter für Bilder in Kapiteln
+// ============================================
+model ImagePlaceholder {
+  id                String   @id @default(cuid())
+  chapterId         String
+  position          Int      @default(0) // Position im Text
+  promptDescription String? // Beschreibung für KI-Generierung
+  generatedUrl      String?
+  status            String   @default("pending") // pending, generating, completed, failed
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@index([chapterId])
+  @@map("image_placeholders")
+}
+
+// ============================================
+// AI_SETTINGS - KI-Einstellungen pro Buch
+// ============================================
+model AISettings {
+  id           String   @id @default(cuid())
+  bookId       String   @unique
+  apiEndpoint  String   @default("https://api.openai.com/v1")
+  apiKey       String? // Verschlüsselt speichern in Produktion
+  model        String   @default("gpt-4")
+  temperature  Float    @default(0.7)
+  maxTokens    Int      @default(2000)
+  systemPrompt String? // Benutzerdefinierter System-Prompt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@map("ai_settings")
+}
+
+// ============================================
+// GLOBAL_SETTINGS - Zentrale App-Einstellungen
+// ============================================
+model GlobalSettings {
+  id           String   @id @default("default")
+  apiEndpoint  String   @default("https://api.openai.com/v1")
+  apiKey       String? // Verschlüsselt speichern in Produktion
+  model        String   @default("gpt-4o-mini")
+  temperature  Float    @default(0.7)
+  maxTokens    Int      @default(4096)
+  systemPrompt String? // Benutzerdefinierter System-Prompt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("global_settings")
 }

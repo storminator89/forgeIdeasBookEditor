@@ -3,8 +3,13 @@ import Link from "next/link";
 
 import { ModeToggle } from "./mode-toggle";
 
+import { Settings } from "lucide-react";
+
 export default function Header() {
-  const links = [{ to: "/", label: "Home" }] as const;
+  const links = [
+    { to: "/", label: "Home" },
+    { to: "/settings", label: "Einstellungen", icon: Settings },
+  ] as const;
 
   return (
     <div>

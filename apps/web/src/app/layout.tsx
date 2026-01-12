@@ -16,6 +16,15 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+import { Crimson_Pro } from "next/font/google";
+
+const crimsonPro = Crimson_Pro({
+  variable: "--font-crimson-pro",
+  subsets: ["latin"],
+  weight: ["400", "600", "700"],
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: "bucherstellung",
   description: "bucherstellung",
@@ -28,7 +37,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body className={`${geistSans.variable} ${geistMono.variable} ${crimsonPro.variable} antialiased`} suppressHydrationWarning>
         <Providers>
           <div className="grid grid-rows-[auto_1fr] h-svh">
             <Header />

@@ -1,65 +1,76 @@
-# bucherstellung
+# AI-Bucherstellung (Book-Creation)
 
-This project was created with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines Next.js, Self, and more.
+Ein KI-gestütztes Tool zur Erstellung, Planung und Verwaltung von Buchprojekten. Von der ersten Idee bis zum fertigen Manuskript.
 
-## Features
+![Preview Placeholder](/public/uploads/preview.png)
 
-- **TypeScript** - For type safety and improved developer experience
-- **Next.js** - Full-stack React framework
-- **TailwindCSS** - Utility-first CSS for rapid UI development
-- **shadcn/ui** - Reusable UI components
-- **Prisma** - TypeScript-first ORM
-- **SQLite/Turso** - Database engine
+## 🚀 Features
 
-## Getting Started
+### 🪄 AI Story Wizard
+- **Interaktive Ideenfindung:** Beschreibe deine Story-Idee und lass dir von der KI gezielte Fragen stellen, um das Konzept zu vertiefen.
+- **Automatische Generierung:** Erstellt auf Knopfdruck Charaktere, Handlungspunkte (Plot Points) und Welt-Elemente, die perfekt aufeinander abgestimmt sind.
 
-First, install the dependencies:
+### 👥 Charakter-Management
+- **KI-Charakter-Assistent:** Erstelle neue Charaktere oder verbessere bestehende mittels KI-Prompts ("Mach ihn mysteriöser", "Füge eine tragische Hintergrundgeschichte hinzu").
+- **Kontext-Awareness:** Die KI berücksichtigt alle bestehenden Charaktere und den Buchkontext für maximale Konsistenz.
+- **Visuelle Identität:** Foto-Upload für Charaktere und editierbare KI-Vorschauen.
 
-```bash
-pnpm install
-```
+### 📝 Editor & Planung
+- **Rich Text Editor:** Ein moderner TipTap-basierter Editor für deine Kapitel.
+- **Strukturierte Planung:** Verwalte Handlungspunkte und Welt-Elemente in eigenen Tabs.
+- **Globale Einstellungen:** Zentrale Konfiguration für KI-Modelle und API-Keys (OpenAI-kompatibel).
 
-## Database Setup
+## 🛠 Tech Stack
 
-This project uses SQLite with Prisma.
+- **Frontend:** Next.js 15 (App Router), React 19, Tailwind CSS.
+- **UI-Komponenten:** shadcn/ui, Lucide Icons.
+- **Editor:** TipTap (Headless Framework).
+- **Backend:** Next.js API Routes.
+- **Datenbank:** Prisma ORM mit SQLite.
+- **Infrastruktur:** pnpm Workspaces (Monorepo).
 
-1. Start the local SQLite database (optional):
+## 📁 Projektstruktur
 
-```bash
-pnpm run db:local
-```
+- `apps/web`: Die Next.js Web-Applikation.
+- `packages/db`: Prisma-Schema und Datenbank-Client.
+- `public/uploads`: Speicherort für hochgeladene Charakter-Bilder.
 
-2. Update your `.env` file in the `apps/web` directory with the appropriate connection details if needed.
+## 🏁 Erste Schritte
 
-3. Apply the schema to your database:
+### Voraussetzungen
+- Node.js (v20+)
+- pnpm
 
-```bash
-pnpm run db:push
-```
+### Installation
 
-Then, run the development server:
+1. Abhängigkeiten installieren:
+   ```bash
+   pnpm install
+   ```
 
-```bash
-pnpm run dev
-```
+2. Datenbank einrichten:
+   ```bash
+   pnpm db:push
+   ```
 
-Open [http://localhost:3001](http://localhost:3001) in your browser to see the fullstack application.
+3. Entwicklungsserver starten:
+   ```bash
+   pnpm dev
+   ```
+   Die App ist dann unter `http://localhost:3001` erreichbar.
 
-## Project Structure
+### KI Konfiguration
 
-```
-bucherstellung/
-├── apps/
-│   └── web/         # Fullstack application (Next.js)
-├── packages/
-│   ├── api/         # API layer / business logic
-```
+Gehe in der App zu den **Einstellungen** (/settings) und hinterlege:
+- API-Endpunkt (z.B. OpenAI oder Local LLM)
+- API-Key
+- Modell-Name (z.B. gpt-4o)
 
-## Available Scripts
+## 📖 Nutzung
 
-- `pnpm run dev`: Start all applications in development mode
-- `pnpm run build`: Build all applications
-- `pnpm run check-types`: Check TypeScript types across all apps
-- `pnpm run db:push`: Push schema changes to database
-- `pnpm run db:studio`: Open database studio UI
-- `pnpm run db:local`: Start the local SQLite database
+1. **Neues Buch:** Wähle zwischen "Manuell" oder dem "KI-Assistenten".
+2. **Wizard:** Beantworte die Fragen der KI, um eine solide Basis für dein Buch zu schaffen.
+3. **Schreiben:** Nutze den Editor und lass dich in den Tabs "Charaktere", "Handlung" und "Welt" von deinen Notizen inspirieren.
+
+---
+Erstellt mit ❤️ für Autoren.
