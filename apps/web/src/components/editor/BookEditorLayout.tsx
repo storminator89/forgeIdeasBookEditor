@@ -1040,6 +1040,7 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
                                     bookId={book.id}
                                     bookTitle={book.title}
                                     author={book.author || "Autor"}
+                                    language={book.language}
                                     coverUrl={book.coverUrl}
                                     hideCoverText={book.hideCoverText}
                                     chapters={book.chapters.map(ch => ({

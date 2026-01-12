@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Loader2, Download } from "lucide-react";
+import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Loader2, Download, Book } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toJpeg } from "html-to-image";
 import { jsPDF } from "jspdf";
+import JSZip from "jszip";
 
 interface Chapter {
     id: string;
@@ -18,6 +19,7 @@ interface BookPreviewProps {
     bookId: string;
     bookTitle: string;
     author?: string;
+    language?: string;
     coverUrl?: string | null;
     hideCoverText?: boolean;
     chapters: Chapter[];
@@ -28,6 +30,7 @@ export default function BookPreview({
     bookId,
     bookTitle,
     author = "Autor",
+    language = "de",
     coverUrl,
     hideCoverText = false,
     chapters,
@@ -38,6 +41,7 @@ export default function BookPreview({
     const [loadedContent, setLoadedContent] = useState<Record<string, string>>({});
     const [loadingChapterId, setLoadingChapterId] = useState<string | null>(null);
     const [isExporting, setIsExporting] = useState(false);
+    const [isExportingEpub, setIsExportingEpub] = useState(false);
     const bookRef = useRef<HTMLDivElement>(null);
 
     // Track which chapters we've already fetched to prevent re-fetching
@@ -204,6 +208,52 @@ export default function BookPreview({
 
     const isLoading = loadingChapterId === currentPageData?.chapterId;
 
+    const escapeXml = (value: string) =>
+        value
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&apos;");
+
+    const slugify = (value: string) => {
+        const slug = value.trim().replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+        return slug || "book";
+    };
+
+    const resolveUrl = (src: string) => {
+        try {
+            return new URL(src, window.location.href).toString();
+        } catch {
+            return src;
+        }
+    };
+
+    const getMediaType = (contentType: string | null, src: string) => {
+        if (contentType && contentType.includes("/")) {
+            return contentType.split(";")[0];
+        }
+
+        const lowered = src.toLowerCase().split("?")[0];
+        if (lowered.endsWith(".png")) return "image/png";
+        if (lowered.endsWith(".gif")) return "image/gif";
+        if (lowered.endsWith(".webp")) return "image/webp";
+        if (lowered.endsWith(".svg")) return "image/svg+xml";
+        return "image/jpeg";
+    };
+
+    const getExtension = (mediaType: string, src: string) => {
+        if (mediaType.includes("png")) return ".png";
+        if (mediaType.includes("gif")) return ".gif";
+        if (mediaType.includes("webp")) return ".webp";
+        if (mediaType.includes("svg")) return ".svg";
+        if (mediaType.includes("jpeg")) return ".jpg";
+        if (mediaType.includes("jpg")) return ".jpg";
+
+        const match = src.toLowerCase().split("?")[0].match(/\.[a-z0-9]+$/);
+        return match ? match[0] : ".jpg";
+    };
+
     // PDF Export function
     const exportToPdf = async () => {
         if (!bookRef.current || allPages.length === 0) return;
@@ -269,6 +319,443 @@ export default function BookPreview({
         }
     };
 
+    const exportToEpub = async () => {
+        if (isExporting || isExportingEpub || chapters.length === 0) return;
+
+        setIsExportingEpub(true);
+
+        try {
+            const orderedChapters = [...chapters].sort((a, b) => a.orderIndex - b.orderIndex);
+            const chapterEntries = await Promise.all(
+                orderedChapters.map(async (chapter) => {
+                    if (Object.prototype.hasOwnProperty.call(loadedContent, chapter.id)) {
+                        return { ...chapter, content: loadedContent[chapter.id] || "" };
+                    }
+
+                    if (chapter.content && chapter.content.trim()) {
+                        return chapter;
+                    }
+
+                    try {
+                        const response = await fetch(
+                            `/api/books/${bookId}/chapters/${chapter.id}`
+                        );
+                        if (response.ok) {
+                            const data = await response.json();
+                            const content = data.content || "";
+                            setLoadedContent((prev) => ({
+                                ...prev,
+                                [chapter.id]: content,
+                            }));
+                            return { ...chapter, content };
+                        }
+                    } catch (error) {
+                        console.error("Failed to fetch chapter for EPUB:", error);
+                    }
+
+                    return { ...chapter, content: chapter.content || "" };
+                })
+            );
+
+            type ImageAsset = { id: string; href: string; mediaType: string; data: ArrayBuffer };
+            const imageAssets: ImageAsset[] = [];
+            const imageBySrc = new Map<string, ImageAsset>();
+
+            const registerImage = async (
+                src: string,
+                nameHint: string,
+                idOverride?: string
+            ): Promise<ImageAsset | null> => {
+                if (!src || src.startsWith("data:")) return null;
+
+                const resolved = resolveUrl(src);
+                const existing = imageBySrc.get(resolved);
+                if (existing) return existing;
+
+                try {
+                    const response = await fetch(resolved);
+                    if (!response.ok) return null;
+
+                    const blob = await response.blob();
+                    const mediaType = getMediaType(
+                        blob.type || response.headers.get("content-type"),
+                        resolved
+                    );
+                    const extension = getExtension(mediaType, resolved);
+                    const safeName = slugify(nameHint) || `image-${imageAssets.length + 1}`;
+                    const href = `images/${safeName}${extension}`;
+                    const data = await blob.arrayBuffer();
+                    const asset = {
+                        id: idOverride ?? `img-${imageAssets.length + 1}`,
+                        href,
+                        mediaType,
+                        data,
+                    };
+
+                    imageAssets.push(asset);
+                    imageBySrc.set(resolved, asset);
+                    return asset;
+                } catch (error) {
+                    console.error("Failed to fetch image for EPUB:", error);
+                    return null;
+                }
+            };
+
+            const processHtml = async (html: string, chapterIndex: number) => {
+                if (typeof DOMParser === "undefined") {
+                    return html;
+                }
+
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, "text/html");
+                const images = Array.from(doc.querySelectorAll("img"));
+
+                for (let imgIndex = 0; imgIndex < images.length; imgIndex += 1) {
+                    const img = images[imgIndex];
+                    const src = img.getAttribute("src");
+                    if (!src || src.startsWith("data:")) continue;
+
+                    const asset = await registerImage(
+                        src,
+                        `chapter-${chapterIndex + 1}-img-${imgIndex + 1}`
+                    );
+                    if (asset) {
+                        img.setAttribute("src", asset.href);
+                    }
+                }
+
+                const voidElements = new Set([
+                    "area",
+                    "base",
+                    "br",
+                    "col",
+                    "embed",
+                    "hr",
+                    "img",
+                    "input",
+                    "link",
+                    "meta",
+                    "param",
+                    "source",
+                    "track",
+                    "wbr",
+                ]);
+
+                const serializeNode = (node: ChildNode): string => {
+                    if (node.nodeType === Node.TEXT_NODE) {
+                        return escapeXml(node.nodeValue || "");
+                    }
+
+                    if (node.nodeType !== Node.ELEMENT_NODE) {
+                        return "";
+                    }
+
+                    const element = node as Element;
+                    const tagName = element.tagName.toLowerCase();
+                    const attributes = Array.from(element.attributes)
+                        .map((attr) => ` ${attr.name}="${escapeXml(attr.value)}"`)
+                        .join("");
+
+                    if (voidElements.has(tagName)) {
+                        return `<${tagName}${attributes} />`;
+                    }
+
+                    const children = Array.from(element.childNodes)
+                        .map(serializeNode)
+                        .join("");
+
+                    return `<${tagName}${attributes}>${children}</${tagName}>`;
+                };
+
+                return Array.from(doc.body.childNodes)
+                    .map(serializeNode)
+                    .join("");
+            };
+
+            const languageTag = (language || "de").trim() || "de";
+            const titleText = (bookTitle || "Book").trim() || "Book";
+            const authorText = (author || "").trim();
+
+            const zip = new JSZip();
+            zip.file("mimetype", "application/epub+zip", { compression: "STORE" });
+
+            const metaInf = zip.folder("META-INF");
+            metaInf?.file(
+                "container.xml",
+                `<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>`
+            );
+
+            const oebps = zip.folder("OEBPS");
+            if (!oebps) {
+                throw new Error("Failed to initialize EPUB folder.");
+            }
+
+            const epubStyles = `
+body {
+    font-family: "Georgia", "Times New Roman", serif;
+    line-height: 1.6;
+    margin: 0;
+    padding: 1.5rem;
+    color: #111111;
+}
+
+h1, h2, h3, h4 {
+    font-weight: 700;
+    margin: 1.2em 0 0.6em;
+}
+
+p {
+    margin: 0 0 1em;
+    text-indent: 1.5em;
+}
+
+p:first-of-type {
+    text-indent: 0;
+}
+
+img {
+    max-width: 100%;
+    height: auto;
+}
+
+blockquote {
+    margin: 1em 2em;
+    padding-left: 1em;
+    border-left: 2px solid #999999;
+    color: #555555;
+}
+
+.cover {
+    text-align: center;
+}
+
+.cover-image img {
+    display: block;
+    max-width: 100%;
+    margin: 0 auto;
+}
+
+.cover-text {
+    margin-top: 2rem;
+}
+
+.cover-text h1 {
+    margin: 0 0 0.5rem;
+}
+
+.cover-text p {
+    margin: 0;
+    text-indent: 0;
+}
+`;
+
+            oebps.file("styles.css", epubStyles);
+
+            const coverAsset = coverUrl
+                ? await registerImage(coverUrl, "cover", "cover-image")
+                : null;
+
+            const chapterFiles: { id: string; href: string; title: string }[] = [];
+
+            for (let index = 0; index < chapterEntries.length; index += 1) {
+                const chapter = chapterEntries[index];
+                const chapterTitle = chapter.title?.trim() || `Kapitel ${index + 1}`;
+                const bodyHtml = await processHtml(chapter.content || "", index);
+                const chapterFile = `chapter-${index + 1}.xhtml`;
+                const chapterXhtml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="${escapeXml(languageTag)}">
+<head>
+  <title>${escapeXml(chapterTitle)}</title>
+  <link rel="stylesheet" type="text/css" href="styles.css"/>
+</head>
+<body>
+  <section class="chapter">
+    <h1>${escapeXml(chapterTitle)}</h1>
+    ${bodyHtml}
+  </section>
+</body>
+</html>`;
+
+                oebps.file(chapterFile, chapterXhtml);
+                chapterFiles.push({
+                    id: `chapter-${index + 1}`,
+                    href: chapterFile,
+                    title: chapterTitle,
+                });
+            }
+
+            const coverTextBlock = authorText
+                ? `<div class="cover-text">
+  <h1>${escapeXml(titleText)}</h1>
+  <p>${escapeXml(authorText)}</p>
+</div>`
+                : `<div class="cover-text">
+  <h1>${escapeXml(titleText)}</h1>
+</div>`;
+
+            const coverBody = coverAsset
+                ? `<div class="cover-image">
+  <img src="${coverAsset.href}" alt="Cover"/>
+</div>${hideCoverText ? "" : coverTextBlock}`
+                : coverTextBlock;
+
+            const coverXhtml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="${escapeXml(languageTag)}">
+<head>
+  <title>${escapeXml(titleText)}</title>
+  <link rel="stylesheet" type="text/css" href="styles.css"/>
+</head>
+<body class="cover">
+  ${coverBody}
+</body>
+</html>`;
+
+            oebps.file("cover.xhtml", coverXhtml);
+
+            const navItems = [
+                `<li><a href="cover.xhtml">Cover</a></li>`,
+                ...chapterFiles.map(
+                    (chapter) => `<li><a href="${chapter.href}">${escapeXml(chapter.title)}</a></li>`
+                ),
+            ].join("");
+
+            const navXhtml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="${escapeXml(languageTag)}">
+<head>
+  <title>Inhalt</title>
+  <link rel="stylesheet" type="text/css" href="styles.css"/>
+</head>
+<body>
+  <nav epub:type="toc" id="toc">
+    <h1>Inhalt</h1>
+    <ol>
+      ${navItems}
+    </ol>
+  </nav>
+</body>
+</html>`;
+
+            oebps.file("nav.xhtml", navXhtml);
+
+            const navPoints = [
+                { id: "cover", href: "cover.xhtml", label: "Cover" },
+                ...chapterFiles.map((chapter) => ({
+                    id: chapter.id,
+                    href: chapter.href,
+                    label: chapter.title,
+                })),
+            ]
+                .map(
+                    (item, index) => `
+    <navPoint id="${item.id}" playOrder="${index + 1}">
+      <navLabel><text>${escapeXml(item.label)}</text></navLabel>
+      <content src="${item.href}"/>
+    </navPoint>`
+                )
+                .join("");
+
+            const tocNcx = `<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head>
+    <meta name="dtb:uid" content="${escapeXml(bookId)}"/>
+    <meta name="dtb:depth" content="1"/>
+    <meta name="dtb:totalPageCount" content="0"/>
+    <meta name="dtb:maxPageNumber" content="0"/>
+  </head>
+  <docTitle><text>${escapeXml(titleText)}</text></docTitle>
+  <navMap>${navPoints}
+  </navMap>
+</ncx>`;
+
+            oebps.file("toc.ncx", tocNcx);
+
+            for (const asset of imageAssets) {
+                oebps.file(asset.href, asset.data, { binary: true });
+            }
+
+            const manifestEntries: string[] = [
+                `<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`,
+                `<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>`,
+                `<item id="css" href="styles.css" media-type="text/css"/>`,
+                `<item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>`,
+            ];
+
+            if (coverAsset) {
+                manifestEntries.push(
+                    `<item id="${coverAsset.id}" href="${coverAsset.href}" media-type="${coverAsset.mediaType}" properties="cover-image"/>`
+                );
+            }
+
+            for (const chapter of chapterFiles) {
+                manifestEntries.push(
+                    `<item id="${chapter.id}" href="${chapter.href}" media-type="application/xhtml+xml"/>`
+                );
+            }
+
+            for (const asset of imageAssets) {
+                if (coverAsset && asset.id === coverAsset.id) continue;
+                manifestEntries.push(
+                    `<item id="${asset.id}" href="${asset.href}" media-type="${asset.mediaType}"/>`
+                );
+            }
+
+            const spineEntries = [
+                `<itemref idref="cover"/>`,
+                `<itemref idref="nav" linear="no"/>`,
+                ...chapterFiles.map((chapter) => `<itemref idref="${chapter.id}"/>`),
+            ];
+
+            const metadataCreator = authorText
+                ? `<dc:creator>${escapeXml(authorText)}</dc:creator>`
+                : "";
+            const modified = new Date().toISOString().split(".")[0] + "Z";
+            const coverMeta = coverAsset ? `<meta name="cover" content="cover-image"/>` : "";
+
+            const contentOpf = `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="bookid" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>${escapeXml(titleText)}</dc:title>
+    ${metadataCreator}
+    <dc:language>${escapeXml(languageTag)}</dc:language>
+    <dc:identifier id="bookid">${escapeXml(bookId)}</dc:identifier>
+    <meta property="dcterms:modified">${escapeXml(modified)}</meta>
+    ${coverMeta}
+  </metadata>
+  <manifest>
+    ${manifestEntries.join("\n    ")}
+  </manifest>
+  <spine toc="ncx">
+    ${spineEntries.join("\n    ")}
+  </spine>
+</package>`;
+
+            oebps.file("content.opf", contentOpf);
+
+            const epubBlob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+            const fileName = `${slugify(titleText)}.epub`;
+            const url = URL.createObjectURL(epubBlob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch (error) {
+            console.error("EPUB export failed:", error);
+        } finally {
+            setIsExportingEpub(false);
+        }
+    };
+
     return (
         <div
             className={cn(
@@ -291,13 +778,29 @@ export default function BookPreview({
                 )}
             </Button>
 
+            {/* EPUB Export Button */}
+            <Button
+                variant="ghost"
+                size="icon"
+                className="absolute top-4 right-24 z-10"
+                onClick={exportToEpub}
+                disabled={isExporting || isExportingEpub}
+                title="Als EPUB exportieren"
+            >
+                {isExportingEpub ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                    <Book className="h-5 w-5" />
+                )}
+            </Button>
+
             {/* PDF Export Button */}
             <Button
                 variant="ghost"
                 size="icon"
                 className="absolute top-4 right-14 z-10"
                 onClick={exportToPdf}
-                disabled={isExporting}
+                disabled={isExporting || isExportingEpub}
                 title="Als PDF exportieren"
             >
                 {isExporting ? (
