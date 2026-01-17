@@ -661,7 +661,7 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
                                             )}
 
                                             <p className="text-xs text-muted-foreground">
-                                                JPG, PNG, WebP oder GIF. Max 5MB.
+                                                JPG, PNG, WebP oder GIF.
                                             </p>
                                         </div>
                                     </div>

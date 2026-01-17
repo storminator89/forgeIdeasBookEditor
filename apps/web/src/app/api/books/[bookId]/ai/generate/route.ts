@@ -21,6 +21,7 @@ interface AIContext {
     }>;
     previousChapters: Array<{
         title: string;
+        content: string;
         summary: string | null;
         orderIndex: number;
     }>;
@@ -30,6 +31,12 @@ interface AIContext {
         summary: string | null;
         orderIndex: number;
     } | null;
+    nextChapters: Array<{
+        title: string;
+        summary: string | null;
+        orderIndex: number;
+    }>;
+    totalChapterCount: number;
     plotPoints: Array<{
         title: string;
         description: string | null;
@@ -81,9 +88,16 @@ async function aggregateContext(
         },
     });
 
-    // Get previous chapters if current chapter is specified
+    // Get previous and next chapters if current chapter is specified
     let previousChapters: AIContext["previousChapters"] = [];
+    let nextChapters: AIContext["nextChapters"] = [];
     let currentChapter: AIContext["currentChapter"] = null;
+    let totalChapterCount = 0;
+
+    // Always get total chapter count for this book
+    totalChapterCount = await prisma.chapter.count({
+        where: { bookId },
+    });
 
     if (chapterId) {
         const chapter = await prisma.chapter.findUnique({
@@ -98,10 +112,27 @@ async function aggregateContext(
 
         if (chapter) {
             currentChapter = chapter;
+
+            // Get previous chapters (for story context) - include full content!
             previousChapters = await prisma.chapter.findMany({
                 where: {
                     bookId,
                     orderIndex: { lt: chapter.orderIndex },
+                },
+                orderBy: { orderIndex: "asc" },
+                select: {
+                    title: true,
+                    content: true,
+                    summary: true,
+                    orderIndex: true,
+                },
+            });
+
+            // Get next chapters (to know the story continues)
+            nextChapters = await prisma.chapter.findMany({
+                where: {
+                    bookId,
+                    orderIndex: { gt: chapter.orderIndex },
                 },
                 orderBy: { orderIndex: "asc" },
                 select: {
@@ -149,6 +180,8 @@ async function aggregateContext(
         characters,
         previousChapters,
         currentChapter,
+        nextChapters,
+        totalChapterCount,
         plotPoints,
         worldElements,
     };
@@ -156,17 +189,48 @@ async function aggregateContext(
 
 // Build system prompt from context
 function buildSystemPrompt(context: AIContext, customSystemPrompt?: string): string {
-    let prompt = `Du bist ein kreativer Schriftsteller, der bei der Erstellung eines Buches hilft. 
+    const currentChapterNum = context.currentChapter ? context.currentChapter.orderIndex + 1 : 1;
+    const totalChapters = context.totalChapterCount || 1;
+    const isLastChapter = context.nextChapters.length === 0;
+    const hasNextChapters = context.nextChapters.length > 0;
+
+    let prompt = `Du bist ein kreativer Schriftsteller, der bei der Erstellung eines Buches hilft.
+
+## WICHTIGE ANWEISUNG - BITTE GENAU BEACHTEN:
+Du schreibst gerade den Inhalt für **Kapitel ${currentChapterNum} von ${totalChapters}**.
+Generiere NUR den Inhalt für DIESES EINE Kapitel. Schreibe NICHT die gesamte Geschichte zu Ende!
+${hasNextChapters ? `Nach diesem Kapitel folgen noch ${context.nextChapters.length} weitere Kapitel. Die Geschichte geht also weiter - beende die Geschichte NICHT in diesem Kapitel!` : ""}
+${isLastChapter ? `Dies ist das letzte Kapitel des Buches. Hier sollte die Geschichte ihren Abschluss finden.` : ""}
+
+Das Kapitel sollte einen eigenen Handlungsbogen haben (Anfang, Mitte, Ende des KAPITELS), aber die Hauptgeschichte darf ${isLastChapter ? "hier zum Abschluss kommen" : "NICHT enden - es müssen offene Fäden für die Folgekapitel bleiben"}.
+
+## ⚠️ STORY-KONTINUITÄT - ABSOLUT KRITISCH:
+Die Zusammenfassungen der vorherigen Kapitel sind KANONISCHE FAKTEN. Du MUSST diese respektieren:
+
+1. **KEINE WIEDERHOLUNGEN**: Wenn ein Gegenstand (Artefakt, Waffe, magischer Gegenstand) bereits in einem früheren Kapitel gefunden/erhalten wurde, darf er NICHT erneut gefunden oder eingeführt werden. Der Protagonist BESITZT diesen Gegenstand bereits!
+
+2. **CHARAKTERE BLEIBEN KONSISTENT**: Die Identität, das Aussehen und die Rolle von Charakteren dürfen sich NICHT ändern. Wenn jemand in Kapitel 1 als Eule beschrieben wurde, bleibt er eine Eule. Wenn zwei Charaktere als dieselbe Person etabliert wurden, bleiben sie dieselbe Person.
+
+3. **BEGLEITER EINFÜHREN**: Neue Begleiter oder Gruppenmitglieder MÜSSEN durch eine Szene eingeführt werden (sie treffen sich, schließen sich an). Sie dürfen NICHT plötzlich "da sein", ohne dass erklärt wird, woher sie kommen.
+
+4. **KONTINUIERLICHER HANDLUNGSVERLAUF**: Die Geschichte setzt DIREKT dort fort, wo das letzte Kapitel endete. Wenn das letzte Kapitel damit endete, dass die Protagonisten am Lagerfeuer schlafen, beginnt dieses Kapitel am nächsten Morgen am selben Ort - NICHT mit einer neuen Reise von einem anderen Ort.
+
+5. **ERREICHTE ZIELE BLEIBEN ERREICHT**: Wenn eine Quest in einem früheren Kapitel abgeschlossen wurde (z.B. "die Flöte gefunden"), wird diese Quest NICHT wiederholt. Die Geschichte geht zur NÄCHSTEN Herausforderung über.
+
+6. **KENNE DEN KONTEXT**: Lies die Zusammenfassungen der vorherigen Kapitel GENAU. Frage dich: "Was hat der Protagonist bereits? Wen kennt er? Wo ist er gerade? Was ist sein aktuelles Ziel?"
+
+## Formatierung:
 Gib deine Antwort in sauberem HTML-Format zurück, das direkt in einen Rich-Text-Editor (TipTap) eingefügt werden kann. 
 Verwende ausschließlich folgende Tags: <p>, <strong>, <em>, <h1>, <h2>, <h3>, <ul>, <ol>, <li>, <blockquote>. 
 Jeder Absatz MUSS in ein <p>-Tag eingeschlossen sein. Verwende KEINE Markdown-Syntax wie ** oder #.`;
 
     if (customSystemPrompt) {
-        prompt += `\n\nZusätzliche Anweisungen:\n${customSystemPrompt}`;
+        prompt += `\n\nZusätzliche Anweisungen des Autors:\n${customSystemPrompt}`;
     }
 
     prompt += `\n\n## Buchinformationen
-Titel: ${context.book.title}`;
+Titel: ${context.book.title}
+Aktuelles Kapitel: ${currentChapterNum} von ${totalChapters}`;
 
     if (context.book.genre) prompt += `\nGenre: ${context.book.genre}`;
     if (context.book.writingStyle) prompt += `\nSchreibstil: ${context.book.writingStyle}`;
@@ -199,11 +263,40 @@ Titel: ${context.book.title}`;
     }
 
     if (context.previousChapters.length > 0) {
-        prompt += `\n\n## Vorherige Kapitel`;
+        prompt += `\n\n## Vorherige Kapitel (VOLLSTÄNDIGER INHALT - dies sind die kanonischen Fakten!)`;
         for (const ch of context.previousChapters) {
-            prompt += `\n### Kapitel ${ch.orderIndex + 1}: ${ch.title}`;
-            if (ch.summary) prompt += `\nZusammenfassung: ${ch.summary}`;
+            prompt += `\n\n### Kapitel ${ch.orderIndex + 1}: ${ch.title}`;
+            // Include full content, stripped of HTML for readability
+            if (ch.content && ch.content.trim()) {
+                const plainText = ch.content
+                    .replace(/<[^>]*>/g, ' ')  // Remove HTML tags
+                    .replace(/\s+/g, ' ')       // Normalize whitespace
+                    .trim();
+                prompt += `\n${plainText}`;
+            } else if (ch.summary) {
+                prompt += `\nZusammenfassung: ${ch.summary}`;
+            }
         }
+        prompt += `\n\n⚠️ WICHTIG: Alles oben Genannte ist bereits geschehen. Diese Ereignisse NICHT wiederholen!`;
+    }
+
+    // Add current chapter info
+    if (context.currentChapter) {
+        prompt += `\n\n## Aktuelles Kapitel (für das du schreibst)`;
+        prompt += `\n### Kapitel ${context.currentChapter.orderIndex + 1}: ${context.currentChapter.title}`;
+        if (context.currentChapter.summary) {
+            prompt += `\nGeplante Zusammenfassung: ${context.currentChapter.summary}`;
+        }
+    }
+
+    // Add next chapters to show the story continues
+    if (context.nextChapters.length > 0) {
+        prompt += `\n\n## Folgende Kapitel (was noch kommen wird - BEENDE DIE GESCHICHTE NICHT!)`;
+        for (const ch of context.nextChapters) {
+            prompt += `\n### Kapitel ${ch.orderIndex + 1}: ${ch.title}`;
+            if (ch.summary) prompt += `\nGeplante Zusammenfassung: ${ch.summary}`;
+        }
+        prompt += `\n\n⚠️ WICHTIG: Da noch ${context.nextChapters.length} Kapitel folgen, darf dieses Kapitel die Geschichte NICHT abschließen!`;
     }
 
     return prompt;

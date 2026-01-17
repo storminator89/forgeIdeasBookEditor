@@ -37,7 +37,7 @@ export default function BookPreview({
     className,
 }: BookPreviewProps) {
     const [currentPage, setCurrentPage] = useState(0);
-    const [isFullscreen, setIsFullscreen] = useState(false);
+    const [isFullscreen, setIsFullscreen] = useState(true); // Start in fullscreen for better PDF export
     const [loadedContent, setLoadedContent] = useState<Record<string, string>>({});
     const [loadingChapterId, setLoadingChapterId] = useState<string | null>(null);
     const [isExporting, setIsExporting] = useState(false);
@@ -128,8 +128,8 @@ export default function BookPreview({
 
             // Split content into multiple pages
             const chapterContent = loadedContent[chapter.id] || chapter.content;
-            // Reduced to 1300 chars to avoid cutoff, especially with images
-            const contentChunks = splitContentIntoPages(chapterContent, 1300);
+            // Increased to 2200 chars to better fill pages while avoiding cutoff
+            const contentChunks = splitContentIntoPages(chapterContent, 2200);
 
             const contentPages = contentChunks.map((chunk, pageIndex) => ({
                 type: "content" as const,
@@ -827,42 +827,53 @@ blockquote {
                         : '0 0 0 1px rgba(0,0,0,0.05), -1px 3px 6px -1px rgba(0,0,0,0.1), 0 10px 40px -5px rgba(0,0,0,0.25)',
                 }}
             >
-                {/* Paper Texture Overlay */}
-                <div className="absolute inset-0 pointer-events-none z-[1] opacity-[0.4] mix-blend-multiply paper-texture rounded-[inherit]" />
+                {/* Paper Texture Overlay - hide for cover */}
+                {currentPageData?.type !== "cover" && (
+                    <div className="absolute inset-0 pointer-events-none z-[1] opacity-[0.4] mix-blend-multiply paper-texture rounded-[inherit]" />
+                )}
 
-                {/* Decorative book spine */}
-                <div className="absolute left-0 top-0 bottom-0 w-4 bg-gradient-to-r from-stone-300 via-stone-100 to-stone-50 dark:from-stone-800 dark:via-stone-700 dark:to-stone-900 z-[2] rounded-l-[inherit]" style={{ boxShadow: 'inset -1px 0 2px rgba(0,0,0,0.1)' }} />
-                <div className="absolute left-4 top-0 bottom-0 w-[1px] bg-black/5 z-[2]" />
+                {/* Decorative book spine - hide for cover */}
+                {currentPageData?.type !== "cover" && (
+                    <>
+                        <div className="absolute left-0 top-0 bottom-0 w-4 bg-gradient-to-r from-stone-300 via-stone-100 to-stone-50 dark:from-stone-800 dark:via-stone-700 dark:to-stone-900 z-[2] rounded-l-[inherit]" style={{ boxShadow: 'inset -1px 0 2px rgba(0,0,0,0.1)' }} />
+                        <div className="absolute left-4 top-0 bottom-0 w-[1px] bg-black/5 z-[2]" />
+                    </>
+                )}
 
-                {/* Page content */}
-                <div className="absolute inset-0 left-6 overflow-hidden bg-[#fffdf8] dark:bg-[#1a1a1a] rounded-r-[inherit]">
-                    {isLoading ? (
-                        <div className="h-full flex items-center justify-center">
-                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                        </div>
-                    ) : currentPageData?.type === "cover" ? (
+                {/* Cover page - edge-to-edge without spine offset */}
+                {currentPageData?.type === "cover" && (
+                    <div className="absolute inset-0 overflow-hidden rounded-[inherit]">
                         <CoverPage title={currentPageData.title} author={author} coverUrl={coverUrl} hideCoverText={hideCoverText} />
-                    ) : null}
+                    </div>
+                )}
 
-                    {/* Content view */}
-                    {currentPageData?.type === "title" && (
-                        <ChapterTitlePage
-                            chapterNumber={currentPageData.chapterNumber}
-                            title={currentPageData.title}
-                            isExporting={isExporting}
-                        />
-                    )}
+                {/* Page content - with spine offset for non-cover pages */}
+                {currentPageData?.type !== "cover" && (
+                    <div className="absolute inset-0 left-6 overflow-hidden bg-[#fffdf8] dark:bg-[#1a1a1a] rounded-r-[inherit]">
+                        {isLoading ? (
+                            <div className="h-full flex items-center justify-center">
+                                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                            </div>
+                        ) : null}
 
-                    {currentPageData?.type === "content" && (
-                        <ContentPage
-                            content={currentPageData.content}
-                            chapterNumber={currentPageData.chapterNumber}
-                            pageNumber={currentPageData.contentPageIndex + 1}
-                        // For ContentPage we rely on global CSS overrides which seem to work for body text,
-                        // but we could pass it here too if needed. Let's stick to ChapterTitlePage fix first.
-                        />
-                    )}
-                </div>
+                        {/* Chapter title view */}
+                        {currentPageData?.type === "title" && (
+                            <ChapterTitlePage
+                                chapterNumber={currentPageData.chapterNumber}
+                                title={currentPageData.title}
+                                isExporting={isExporting}
+                            />
+                        )}
+
+                        {currentPageData?.type === "content" && (
+                            <ContentPage
+                                content={currentPageData.content}
+                                chapterNumber={currentPageData.chapterNumber}
+                                pageNumber={currentPageData.contentPageIndex + 1}
+                            />
+                        )}
+                    </div>
+                )}
 
                 {/* Page number */}
                 {currentPageData?.type !== "cover" && (
@@ -1039,15 +1050,15 @@ function ContentPage({
     pageNumber: number;
 }) {
     return (
-        <div className="h-full flex flex-col p-10 pt-5 overflow-hidden">
-            {/* Header */}
-            <div className="flex justify-between text-xs text-stone-400 dark:text-stone-600 font-serif italic mb-2">
-                <span>Kapitel {chapterNumber}</span>
+        <div className="h-full flex flex-col p-8 pt-4 overflow-hidden">
+            {/* Header - subtle chapter indicator */}
+            <div className="flex justify-between items-center text-xs text-stone-400 dark:text-stone-500 font-serif italic mb-3 border-b border-stone-200/50 dark:border-stone-700/50 pb-2">
+                <span className="tracking-wide">Kapitel {chapterNumber}</span>
             </div>
 
-            {/* Content - with more bottom padding for page numbers */}
+            {/* Content - optimized spacing for better page fill */}
             <div
-                className="flex-1 overflow-hidden book-content pb-16"
+                className="flex-1 overflow-hidden book-content pb-8"
                 dangerouslySetInnerHTML={{ __html: content }}
             />
 
@@ -1055,19 +1066,20 @@ function ContentPage({
             <style jsx global>{`
                 .book-content {
                     font-family: var(--font-crimson-pro), "Georgia", "Times New Roman", serif;
-                    font-size: 16px;
-                    line-height: 1.9;
-                    color: #374151;
+                    font-size: 15px;
+                    line-height: 1.85;
+                    color: #2d3748;
                     text-align: justify;
                     hyphens: auto;
+                    letter-spacing: 0.01em;
                 }
 
                 html.dark .book-content {
-                    color: #d1d5db;
+                    color: #e2e8f0;
                 }
 
                 .book-content p {
-                    margin-bottom: 0;
+                    margin-bottom: 0.85em;
                     text-indent: 1.5em;
                     text-align: justify;
                 }
@@ -1078,16 +1090,17 @@ function ContentPage({
 
                 .book-content p:first-of-type::first-letter {
                     float: left;
-                    font-size: 4em;
-                    line-height: 0.8;
-                    padding-right: 0.1em;
-                    font-weight: bold;
-                    color: #92400e;
+                    font-size: 3.5em;
+                    line-height: 0.85;
+                    padding-right: 0.08em;
+                    padding-top: 0.05em;
+                    font-weight: 600;
+                    color: #b45309;
                     font-family: var(--font-crimson-pro), serif;
                 }
 
                 html.dark .book-content p:first-of-type::first-letter {
-                    color: #d97706;
+                    color: #f59e0b;
                 }
 
                 .book-content h1,
@@ -1247,6 +1260,31 @@ function ContentPage({
                 
                 .pdf-export-mode .book-content {
                     color: #000000 !important;
+                }
+                
+                /* Force white background on all inner containers */
+                .pdf-export-mode > div,
+                .pdf-export-mode div,
+                .pdf-export-mode [class*="bg-"],
+                .pdf-export-mode .chapter-title-page,
+                .pdf-export-mode [class*="dark:bg-"] {
+                    background-color: #ffffff !important;
+                    background: #ffffff !important;
+                    background-image: none !important;
+                }
+                
+                /* Hide decorative elements in PDF */
+                .pdf-export-mode .paper-texture,
+                .pdf-export-mode [class*="from-stone"],
+                .pdf-export-mode [class*="via-stone"],
+                .pdf-export-mode [class*="to-stone"]:not(p):not(span):not(h1):not(h2):not(h3) {
+                    opacity: 0 !important;
+                    background: transparent !important;
+                }
+                
+                /* Reset header border for print */
+                .pdf-export-mode .border-b {
+                    border-color: #cccccc !important;
                 }
                 
                 /* Force ALL text to black, overriding Tailwind classes */

@@ -25,14 +25,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Validate file size (max 5MB)
-        const maxSize = 5 * 1024 * 1024;
-        if (file.size > maxSize) {
-            return NextResponse.json(
-                { error: "File too large. Maximum size is 5MB." },
-                { status: 400 }
-            );
-        }
+        // No file size limit - allow large cover images
 
         // Create uploads directory if it doesn't exist
         const uploadsDir = path.join(process.cwd(), "public", "uploads");
