@@ -133,6 +133,11 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
     const [isUploadingCover, setIsUploadingCover] = useState(false);
     const coverInputRef = useRef<HTMLInputElement>(null);
 
+    // Batch generation state
+    const [isGeneratingAll, setIsGeneratingAll] = useState(false);
+    const [generationProgress, setGenerationProgress] = useState(0);
+    const [generationTotal, setGenerationTotal] = useState(0);
+
     const totalWords = book.chapters.reduce((sum, ch) => sum + ch.wordCount, 0);
 
     const handleSaveBookDetails = async () => {
@@ -373,6 +378,88 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
             console.error("Error creating chapter:", error);
         } finally {
             setIsCreatingChapter(false);
+        }
+    };
+
+    // Generate all chapters that don't have content
+    const handleGenerateAllChapters = async () => {
+        if (!book.aiSettings?.apiKey) {
+            alert("Bitte konfiguriere zuerst die KI-Einstellungen.");
+            setActiveTab("settings");
+            return;
+        }
+
+        // Find chapters without content (wordCount === 0)
+        const emptyChapters = book.chapters
+            .filter(ch => ch.wordCount === 0)
+            .sort((a, b) => a.orderIndex - b.orderIndex);
+
+        if (emptyChapters.length === 0) {
+            alert("Alle Kapitel haben bereits Inhalt.");
+            return;
+        }
+
+        setIsGeneratingAll(true);
+        setGenerationProgress(0);
+        setGenerationTotal(emptyChapters.length);
+
+        try {
+            for (let i = 0; i < emptyChapters.length; i++) {
+                const chapter = emptyChapters[i];
+                setGenerationProgress(i + 1);
+
+                // Generate content for this chapter
+                const generateResponse = await fetch(`/api/books/${book.id}/ai/generate`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        chapterId: chapter.id,
+                        useSummaryAsPrompt: true,
+                        targetLength: "long",
+                    }),
+                });
+
+                if (!generateResponse.ok) {
+                    console.error(`Failed to generate chapter ${chapter.orderIndex + 1}`);
+                    continue;
+                }
+
+                const data = await generateResponse.json();
+                const content = data.text; // API returns 'text', not 'content'
+
+                // Skip if no content was generated
+                if (!content) {
+                    console.error(`No content generated for chapter ${chapter.orderIndex + 1}`);
+                    continue;
+                }
+
+                // Save the generated content
+                await fetch(`/api/books/${book.id}/chapters/${chapter.id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ content }),
+                });
+
+                // Update local state with new word count
+                const wordCount = content.replace(/<[^>]*>/g, ' ').split(/\s+/).filter(Boolean).length;
+                setBook(prev => ({
+                    ...prev,
+                    chapters: prev.chapters.map(ch =>
+                        ch.id === chapter.id
+                            ? { ...ch, wordCount, status: "in_progress" }
+                            : ch
+                    )
+                }));
+            }
+
+            alert(`${emptyChapters.length} Kapitel erfolgreich generiert!`);
+        } catch (error) {
+            console.error("Error generating chapters:", error);
+            alert("Fehler bei der Generierung. Bitte versuche es erneut.");
+        } finally {
+            setIsGeneratingAll(false);
+            setGenerationProgress(0);
+            setGenerationTotal(0);
         }
     };
 
@@ -668,23 +755,66 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
                                 </CardContent>
                             </Card>
 
-                            {/* AI Status */}
+                            {/* AI Status & Batch Generation */}
                             <Card className="bg-gradient-to-br from-chart-1/10 to-chart-3/10 border-chart-3/20">
-                                <CardContent className="flex items-center gap-4 py-4">
-                                    <div className="p-3 rounded-full bg-chart-3/20">
-                                        <Sparkles className="h-5 w-5 text-chart-3" />
+                                <CardContent className="py-4 space-y-4">
+                                    <div className="flex items-center gap-4">
+                                        <div className="p-3 rounded-full bg-chart-3/20">
+                                            <Sparkles className="h-5 w-5 text-chart-3" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <h3 className="font-medium">KI-Unterstützung</h3>
+                                            <p className="text-sm text-muted-foreground">
+                                                {book.aiSettings?.apiKey
+                                                    ? `Konfiguriert (${book.aiSettings.model})`
+                                                    : "Nicht konfiguriert - Gehe zu Einstellungen"}
+                                            </p>
+                                        </div>
+                                        <Button variant="outline" size="sm" onClick={() => setActiveTab("settings")}>
+                                            Konfigurieren
+                                        </Button>
                                     </div>
-                                    <div className="flex-1">
-                                        <h3 className="font-medium">KI-Unterstützung</h3>
-                                        <p className="text-sm text-muted-foreground">
-                                            {book.aiSettings?.apiKey
-                                                ? `Konfiguriert (${book.aiSettings.model})`
-                                                : "Nicht konfiguriert - Gehe zu Einstellungen"}
-                                        </p>
-                                    </div>
-                                    <Button variant="outline" size="sm" onClick={() => setActiveTab("settings")}>
-                                        Konfigurieren
-                                    </Button>
+
+                                    {/* Batch Generation Button */}
+                                    {book.chapters.length > 0 && book.aiSettings?.apiKey && (
+                                        <div className="border-t pt-4">
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <h4 className="font-medium text-sm">Alle Kapitel generieren</h4>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {isGeneratingAll
+                                                            ? `Generiere Kapitel ${generationProgress} von ${generationTotal}...`
+                                                            : `${book.chapters.filter(ch => ch.wordCount === 0).length} Kapitel ohne Inhalt`}
+                                                    </p>
+                                                </div>
+                                                <Button
+                                                    onClick={handleGenerateAllChapters}
+                                                    disabled={isGeneratingAll || book.chapters.filter(ch => ch.wordCount === 0).length === 0}
+                                                    size="sm"
+                                                >
+                                                    {isGeneratingAll ? (
+                                                        <>
+                                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                            {generationProgress}/{generationTotal}
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Sparkles className="mr-2 h-4 w-4" />
+                                                            Alle generieren
+                                                        </>
+                                                    )}
+                                                </Button>
+                                            </div>
+                                            {isGeneratingAll && (
+                                                <div className="mt-3 h-2 bg-secondary rounded-full overflow-hidden">
+                                                    <div
+                                                        className="h-full bg-chart-3 transition-all duration-300"
+                                                        style={{ width: `${(generationProgress / generationTotal) * 100}%` }}
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </CardContent>
                             </Card>
                         </div>

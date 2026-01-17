@@ -48,28 +48,37 @@ export default function BookPreview({
     const fetchedChaptersRef = useRef<Set<string>>(new Set());
 
     // Helper function to split HTML content into pages
-    const splitContentIntoPages = useCallback((html: string, charsPerPage: number = 2000): string[] => {
+    // Uses conservative approach to prevent text cutoff
+    const splitContentIntoPages = useCallback((html: string, charsPerPage: number = 1800): string[] => {
         if (!html || html.trim() === "") return [""];
 
-        // Simple approach: split by paragraphs and accumulate until we reach the limit
         const tempDiv = typeof document !== 'undefined' ? document.createElement('div') : null;
         if (!tempDiv) {
-            // Server-side fallback - just split by character count roughly
+            // Server-side fallback - split by paragraph tags
             const pages: string[] = [];
-            let remaining = html;
-            while (remaining.length > 0) {
-                // Try to find a good break point (end of paragraph)
-                let breakPoint = charsPerPage;
-                if (remaining.length > charsPerPage) {
-                    // Look for paragraph end
-                    const pEnd = remaining.lastIndexOf('</p>', charsPerPage);
-                    if (pEnd > charsPerPage / 2) {
-                        breakPoint = pEnd + 4; // Include </p>
-                    }
+            // Split by closing </p> tags to ensure we never cut mid-paragraph
+            const paragraphs = html.split('</p>').map(p => p.trim()).filter(Boolean).map(p => p + '</p>');
+
+            let currentPage = "";
+            let currentLength = 0;
+
+            for (const para of paragraphs) {
+                const textLength = para.replace(/<[^>]*>/g, '').length;
+
+                if (currentLength + textLength > charsPerPage && currentPage !== "") {
+                    pages.push(currentPage);
+                    currentPage = para;
+                    currentLength = textLength;
+                } else {
+                    currentPage += para;
+                    currentLength += textLength;
                 }
-                pages.push(remaining.slice(0, breakPoint));
-                remaining = remaining.slice(breakPoint);
             }
+
+            if (currentPage) {
+                pages.push(currentPage);
+            }
+
             return pages.length > 0 ? pages : [""];
         }
 
@@ -77,11 +86,26 @@ export default function BookPreview({
         const children = Array.from(tempDiv.children);
 
         if (children.length === 0) {
-            // No block elements, just text - split by characters
+            // No block elements, just wrap in paragraph
             const text = tempDiv.textContent || "";
+            if (text.length <= charsPerPage) {
+                return [`<p>${text}</p>`];
+            }
+            // Split at sentence boundaries for long text
+            const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
             const pages: string[] = [];
-            for (let i = 0; i < text.length; i += charsPerPage) {
-                pages.push(`<p>${text.slice(i, i + charsPerPage)}</p>`);
+            let currentPage = "";
+
+            for (const sentence of sentences) {
+                if (currentPage.length + sentence.length > charsPerPage && currentPage) {
+                    pages.push(`<p>${currentPage.trim()}</p>`);
+                    currentPage = sentence;
+                } else {
+                    currentPage += sentence;
+                }
+            }
+            if (currentPage) {
+                pages.push(`<p>${currentPage.trim()}</p>`);
             }
             return pages.length > 0 ? pages : [""];
         }
@@ -93,16 +117,18 @@ export default function BookPreview({
         for (const child of children) {
             const childHtml = (child as HTMLElement).outerHTML;
             const childText = (child as HTMLElement).textContent || "";
+            const childLength = childText.length;
 
-            if (currentLength + childText.length > charsPerPage && currentPage !== "") {
-                // Start new page
+            // If adding this child would exceed the limit AND we already have content, start new page
+            if (currentLength + childLength > charsPerPage && currentPage !== "") {
                 pages.push(currentPage);
-                currentPage = childHtml;
-                currentLength = childText.length;
-            } else {
-                currentPage += childHtml;
-                currentLength += childText.length;
+                currentPage = "";
+                currentLength = 0;
             }
+
+            // Add the child to current page
+            currentPage += childHtml;
+            currentLength += childLength;
         }
 
         if (currentPage) {
@@ -128,8 +154,8 @@ export default function BookPreview({
 
             // Split content into multiple pages
             const chapterContent = loadedContent[chapter.id] || chapter.content;
-            // Increased to 2200 chars to better fill pages while avoiding cutoff
-            const contentChunks = splitContentIntoPages(chapterContent, 2200);
+            // Conservative limit to prevent text cutoff at page bottom
+            const contentChunks = splitContentIntoPages(chapterContent, 1600);
 
             const contentPages = contentChunks.map((chunk, pageIndex) => ({
                 type: "content" as const,
