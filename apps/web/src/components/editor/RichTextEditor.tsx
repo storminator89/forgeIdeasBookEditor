@@ -233,6 +233,7 @@ export default function RichTextEditor({
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [selectedImage, setSelectedImage] = useState<HTMLImageElement | null>(null);
     const [imageToolbarPos, setImageToolbarPos] = useState<{ top: number; left: number } | null>(null);
+    const [, setSelectionUpdateTrigger] = useState(0); // Used to force re-render on selection change
 
     // Get CSS class based on image size - professional book styling
     const getImageClass = (size: "large" | "medium" | "small") => {
@@ -412,6 +413,14 @@ export default function RichTextEditor({
         onUpdate: ({ editor }) => {
             onChange(editor.getHTML());
         },
+        onSelectionUpdate: ({ editor }) => {
+            // Force re-render to update toolbar active states
+            // We can do this by setting a state or using a ref, but mostly React detects changes if we pull state.
+            // Since Toolbar uses `editor.isActive(...)` and `editor` object reference is stable, 
+            // the Toolbar component might not re-render just because selection changed inside Tiptap.
+            // A simple trick is to trigger a state update.
+            setSelectionUpdateTrigger(Date.now());
+        },
     });
 
     const handleFileUpload = useCallback(async (file: File) => {
@@ -558,7 +567,6 @@ export default function RichTextEditor({
                 )}
             </div>
 
-            {/* Image Upload Dialog */}
             <Dialog open={showImageDialog} onOpenChange={setShowImageDialog}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
@@ -685,12 +693,67 @@ export default function RichTextEditor({
                     </div>
                 </DialogContent>
             </Dialog>
+
+            <style jsx global>{`
+                .ProseMirror h1 { font-size: 2rem; font-weight: 700; margin-top: 1.5rem; margin-bottom: 0.75rem; line-height: 1.2; }
+                .ProseMirror h2 { font-size: 1.5rem; font-weight: 600; margin-top: 1.25rem; margin-bottom: 0.5rem; line-height: 1.3; }
+                .ProseMirror h3 { font-size: 1.25rem; font-weight: 600; margin-top: 1rem; margin-bottom: 0.5rem; line-height: 1.4; }
+                .ProseMirror ul { list-style-type: disc; padding-left: 1.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; }
+                .ProseMirror ol { list-style-type: decimal; padding-left: 1.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; }
+                .ProseMirror blockquote { border-left: 2px solid var(--primary); padding-left: 1rem; font-style: italic; margin-top: 1rem; margin-bottom: 1rem; }
+                .ProseMirror p { margin-top: 0.5rem; margin-bottom: 0.5rem; line-height: 1.6; }
+            `}</style>
         </>
     );
 }
 
-// Export word count utility
-export function getWordCount(html: string): number {
-    const text = html.replace(/<[^>]*>/g, " ");
-    return text.split(/\s+/).filter((word) => word.length > 0).length;
+// Export text statistics utility
+export interface TextStatistics {
+    wordCount: number;
+    characterCount: number;
+    readingTime: number; // in minutes
+    paragraphCount: number;
+    sentenceCount: number;
+    averageSentenceLength: number; // words per sentence
+}
+
+export function getTextStatistics(html: string): TextStatistics {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+    const text = doc.body.textContent || "";
+
+    // Word count
+    const words = text.trim().split(/\s+/).filter((word) => word.length > 0);
+    const wordCount = words.length;
+
+    // Character count (excluding whitespace for a more accurate "content" metric, or including? 
+    // Usually purely characters including spaces is standard for limits, but for "Netto" maybe without.
+    // Let's go with standard length).
+    const characterCount = text.length;
+
+    // Reading time (avg 225 words per minute)
+    const readingTime = Math.ceil(wordCount / 225);
+
+    // Paragraph count - counting block elements roughly
+    // This is a heuristic. Tiptap usually uses <p>.
+    const paragraphs = doc.querySelectorAll('p, h1, h2, h3, h4, h5, h6, blockquote, li');
+    // Filter out empty paragraphs often left by editors
+    const nonEmptyParagraphs = Array.from(paragraphs).filter(p => p.textContent?.trim().length ?? 0 > 0);
+    const paragraphCount = Math.max(1, nonEmptyParagraphs.length); // At least 1 if there is text, simplistic
+
+    // Sentence count
+    // specific punctuation split. roughly.
+    const sentenceCount = text.split(/[.!?]+/).filter(s => s.trim().length > 0).length || 1;
+
+    // Avg sentence length
+    const averageSentenceLength = wordCount > 0 ? Math.round(wordCount / sentenceCount) : 0;
+
+    return {
+        wordCount,
+        characterCount,
+        readingTime,
+        paragraphCount,
+        sentenceCount,
+        averageSentenceLength
+    };
 }

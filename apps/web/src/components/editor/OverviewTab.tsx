@@ -52,12 +52,17 @@ type Book = {
     author: string | null;
     description: string | null;
     genre: string | null;
+    targetAudience: string | null;
+    writingStyle: string | null;
+    language: string;
     coverUrl: string | null;
     hideCoverText: boolean;
     chapters: Chapter[];
     characters: any[];
     plotPoints: any[];
+    worldElements: any[];
     aiSettings: AISettings;
+
 };
 
 interface OverviewTabProps {

@@ -32,7 +32,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import RichTextEditor, { getWordCount } from "@/components/editor/RichTextEditor";
+import RichTextEditor, { getTextStatistics } from "@/components/editor/RichTextEditor";
 
 type AISettings = {
     id: string;
@@ -153,8 +153,8 @@ export default function ChapterEditorView({
     // Focus mode state
     const [isFocusMode, setIsFocusMode] = useState(false);
 
-    // Calculate word count using getWordCount utility
-    const wordCount = getWordCount(content);
+    // Calculate text statistics
+    const stats = getTextStatistics(content);
 
     // Find prev/next chapters
     const currentIndex = chapters.findIndex((c) => c.id === chapter.id);
@@ -384,12 +384,29 @@ export default function ChapterEditorView({
 
                 {/* Footer - Hidden in Focus Mode */}
                 <footer className={`border-t bg-card px-4 py-3 flex items-center justify-between transition-all duration-300 ${isFocusMode ? "opacity-0 h-0 overflow-hidden py-0 border-none" : "opacity-100"}`}>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span>{wordCount.toLocaleString("de-DE")} Wörter</span>
+                    <div className="flex items-center gap-6 text-sm text-muted-foreground overflow-x-auto no-scrollbar">
+                        <div className="flex items-center gap-2" title="Wörter">
+                            <span className="font-medium text-foreground">{stats.wordCount.toLocaleString("de-DE")}</span> Wörter
+                        </div>
+                        <div className="flex items-center gap-2" title="Zeichen (inkl. Leerzeichen)">
+                            <span className="font-medium text-foreground">{stats.characterCount.toLocaleString("de-DE")}</span> Zeichen
+                        </div>
+                        <div className="flex items-center gap-2" title="Geschätzte Lesezeit">
+                            <span className="font-medium text-foreground">~{stats.readingTime}</span> Min.
+                        </div>
+                        <div className="hidden md:flex items-center gap-2" title="Absätze">
+                            <span className="font-medium text-foreground">{stats.paragraphCount}</span> Absätze
+                        </div>
+                        <div className="hidden lg:flex items-center gap-2" title="Durchschnittliche Satzlänge">
+                            <span className="font-medium text-foreground">Ø {stats.averageSentenceLength}</span> Wörter/Satz
+                        </div>
+
+                        <div className="h-4 w-px bg-border mx-2" />
+
                         <select
                             value={status}
                             onChange={(e) => setStatus(e.target.value)}
-                            className="bg-transparent border rounded px-2 py-1 text-xs"
+                            className="bg-transparent border rounded px-2 py-1 text-xs focus:ring-1 focus:ring-primary"
                         >
                             <option value="draft">Entwurf</option>
                             <option value="in_progress">In Arbeit</option>
@@ -420,10 +437,21 @@ export default function ChapterEditorView({
 
                 {/* Focus Mode Floating Controls */}
                 {isFocusMode && (
-                    <div className="fixed bottom-6 right-6 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300">
-                        {/* Word count badge */}
-                        <div className="bg-card/90 backdrop-blur-sm border rounded-full px-4 py-2 shadow-lg text-sm text-muted-foreground">
-                            {wordCount.toLocaleString("de-DE")} Wörter
+                    <div className="fixed bottom-6 right-6 flex flex-col items-end gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                        {/* Stats badge */}
+                        <div className="bg-card/90 backdrop-blur-sm border rounded-xl p-4 shadow-lg text-sm text-muted-foreground flex flex-col gap-2 min-w-[180px]">
+                            <div className="flex justify-between items-center">
+                                <span>Wörter</span>
+                                <span className="font-bold text-foreground">{stats.wordCount.toLocaleString("de-DE")}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span>Zeichen</span>
+                                <span className="font-bold text-foreground">{stats.characterCount.toLocaleString("de-DE")}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span>Lesezeit</span>
+                                <span className="font-bold text-foreground">~{stats.readingTime} Min.</span>
+                            </div>
                         </div>
                         {/* Exit focus mode button */}
                         <Button

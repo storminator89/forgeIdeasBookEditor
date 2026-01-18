@@ -38,6 +38,9 @@ import CharacterRelationModal from "@/components/editor/CharacterRelationModal";
 import CharacterRelationshipGraph from "@/components/editor/CharacterRelationshipGraph";
 import GlobalSearch from "@/components/editor/GlobalSearch";
 import OverviewTab from "@/components/editor/OverviewTab";
+import ChapterTab from "@/components/editor/ChapterTab";
+import PlotTab from "@/components/editor/PlotTab";
+import WorldTab from "@/components/editor/WorldTab";
 
 type Chapter = {
     id: string;
@@ -77,6 +80,20 @@ type Character = {
         relationType: string;
         description: string | null;
         character: {
+            id: string;
+            name: string;
+            role: string;
+            imageUrl: string | null;
+        };
+    }>;
+};
+
+type CharacterWithRelations = Character & {
+    relationsFrom: Array<{
+        id: string;
+        relationType: string;
+        description: string | null;
+        relatedCharacter: {
             id: string;
             name: string;
             role: string;
@@ -155,7 +172,15 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
     // Character relationships state
     const [characterViewMode, setCharacterViewMode] = useState<"cards" | "graph">("cards");
     const [showRelationModal, setShowRelationModal] = useState(false);
-    const [editingRelationsCharacter, setEditingRelationsCharacter] = useState<Character | null>(null);
+    const [editingRelationsCharacter, setEditingRelationsCharacter] = useState<CharacterWithRelations | null>(null);
+
+    const handleCharacterNodeClick = (characterId: string) => {
+        const character = book.characters.find(c => c.id === characterId);
+        if (character) {
+            setEditingCharacter(character);
+            setShowCharacterForm(true);
+        }
+    };
 
     const totalWords = book.chapters.reduce((sum, ch) => sum + ch.wordCount, 0);
 
@@ -461,92 +486,13 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
                             )}
 
                             {activeTab === "chapters" && (
-                                <div className="space-y-6">
-                                    <div className="flex items-center justify-between">
-                                        <h2 className="text-2xl font-bold font-serif">Kapitelübersicht</h2>
-                                        <Button onClick={handleCreateChapter} disabled={isCreatingChapter} className="shadow-lg shadow-primary/20">
-                                            {isCreatingChapter ? (
-                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            ) : (
-                                                <Plus className="mr-2 h-4 w-4" />
-                                            )}
-                                            Neues Kapitel
-                                        </Button>
-                                    </div>
-
-                                    <Card className="bg-card/50 backdrop-blur-sm border-white/5">
-                                        <CardContent className="p-0">
-                                            <div className="rounded-lg overflow-hidden">
-                                                <div className="grid grid-cols-12 gap-4 p-4 text-xs font-medium text-muted-foreground bg-secondary/30 border-b border-border/50">
-                                                    <div className="col-span-1"></div>
-                                                    <div className="col-span-1">#</div>
-                                                    <div className="col-span-6">Titel</div>
-                                                    <div className="col-span-2">Status</div>
-                                                    <div className="col-span-2 text-right">Wörter</div>
-                                                </div>
-
-                                                <DragDropContext onDragEnd={handleChapterReorder}>
-                                                    <Droppable droppableId="chapters">
-                                                        {(provided) => (
-                                                            <div
-                                                                {...provided.droppableProps}
-                                                                ref={provided.innerRef}
-                                                                className="divide-y divide-border/50"
-                                                            >
-                                                                {book.chapters.length === 0 ? (
-                                                                    <div className="p-12 text-center text-muted-foreground">
-                                                                        <BookOpen className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                                                                        <p>Noch keine Kapitel erstellt.</p>
-                                                                    </div>
-                                                                ) : (
-                                                                    book.chapters.map((chapter, index) => (
-                                                                        <Draggable key={chapter.id} draggableId={chapter.id} index={index}>
-                                                                            {(provided, snapshot) => (
-                                                                                <div
-                                                                                    ref={provided.innerRef}
-                                                                                    {...provided.draggableProps}
-                                                                                    className={cn(
-                                                                                        "grid grid-cols-12 gap-4 p-4 items-center hover:bg-secondary/50 transition-colors group",
-                                                                                        snapshot.isDragging && "bg-secondary shadow-lg z-50 rounded-lg"
-                                                                                    )}
-                                                                                >
-                                                                                    <div className="col-span-1 flex items-center justify-center text-muted-foreground/30 group-hover:text-muted-foreground cursor-grab active:cursor-grabbing" {...provided.dragHandleProps}>
-                                                                                        <GripVertical className="h-4 w-4" />
-                                                                                    </div>
-                                                                                    <div className="col-span-1 font-mono text-sm text-muted-foreground">
-                                                                                        {index + 1}
-                                                                                    </div>
-                                                                                    <div className="col-span-6 font-medium">
-                                                                                        <Link
-                                                                                            href={`/books/${book.id}/chapter/${chapter.id}` as Route}
-                                                                                            className="hover:text-primary transition-colors flex items-center gap-2"
-                                                                                        >
-                                                                                            {chapter.title || "Unbenanntes Kapitel"}
-                                                                                            <ArrowLeft className="h-3 w-3 opacity-0 group-hover:opacity-100 rotate-180 transition-opacity text-primary" />
-                                                                                        </Link>
-                                                                                    </div>
-                                                                                    <div className="col-span-2">
-                                                                                        <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-medium border", getStatusColor(chapter.status))}>
-                                                                                            {getStatusLabel(chapter.status)}
-                                                                                        </span>
-                                                                                    </div>
-                                                                                    <div className="col-span-2 text-right text-sm text-muted-foreground font-mono">
-                                                                                        {chapter.wordCount}
-                                                                                    </div>
-                                                                                </div>
-                                                                            )}
-                                                                        </Draggable>
-                                                                    ))
-                                                                )}
-                                                                {provided.placeholder}
-                                                            </div>
-                                                        )}
-                                                    </Droppable>
-                                                </DragDropContext>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                </div>
+                                <ChapterTab
+                                    bookId={book.id}
+                                    chapters={book.chapters}
+                                    onReorder={handleChapterReorder}
+                                    onCreate={handleCreateChapter}
+                                    isCreating={isCreatingChapter}
+                                />
                             )}
 
                             {activeTab === "characters" && (
@@ -584,16 +530,17 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
                                     </div>
 
                                     {/* AI Charakter Assistent */}
-                                    <CharacterAIPanel bookId={book.id} onCharacterGenerated={handleCharacterSave} />
+                                    <CharacterAIPanel
+                                        bookId={book.id}
+                                        onCharacterCreated={handleCharacterSave}
+                                        onCharacterUpdated={handleCharacterSave}
+                                    />
 
                                     {characterViewMode === "graph" ? (
                                         <Card className="h-[600px] overflow-hidden border-border/50 shadow-inner bg-card/30">
                                             <CharacterRelationshipGraph
-                                                characters={book.characters}
-                                                onNodeClick={(character) => {
-                                                    setEditingCharacter(character as any);
-                                                    setShowCharacterForm(true);
-                                                }}
+                                                characters={book.characters as any}
+                                                onNodeClick={handleCharacterNodeClick}
                                             />
                                         </Card>
                                     ) : (
@@ -640,7 +587,7 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
                                                                     className="h-8 w-8 rounded-full"
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
-                                                                        setEditingRelationsCharacter(character);
+                                                                        setEditingRelationsCharacter(character as any);
                                                                         setShowRelationModal(true);
                                                                     }}
                                                                     title="Beziehungen bearbeiten"
@@ -674,112 +621,35 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
                             )}
 
                             {activeTab === "plot" && (
-                                <div className="space-y-6">
-                                    <div className="flex items-center justify-between">
-                                        <h2 className="text-2xl font-bold font-serif">Handlungspunkte</h2>
-                                        <Button onClick={() => setShowPlotForm(true)} className="shadow-lg shadow-primary/20">
-                                            <Plus className="mr-2 h-4 w-4" />
-                                            Neuer Punkt
-                                        </Button>
-                                    </div>
-                                    <div className="space-y-4">
-                                        {book.plotPoints.map((plotPoint) => (
-                                            <Card
-                                                key={plotPoint.id}
-                                                className="cursor-pointer hover:bg-secondary/20 hover:border-primary/30 transition-all duration-300"
-                                                onClick={() => {
-                                                    setEditingPlotPoint(plotPoint);
-                                                    setShowPlotForm(true);
-                                                }}
-                                            >
-                                                <CardHeader>
-                                                    <div className="flex justify-between items-start">
-                                                        <div>
-                                                            <CardTitle className="text-lg">{plotPoint.title}</CardTitle>
-                                                            <CardDescription>{plotPoint.type}</CardDescription>
-                                                        </div>
-                                                        <Button
-                                                            size="sm"
-                                                            variant="ghost"
-                                                            className="text-destructive hover:text-destructive hover:bg-destructive/10 -mt-2 -mr-2"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                handlePlotPointDelete(plotPoint.id);
-                                                            }}
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
-                                                    </div>
-                                                </CardHeader>
-                                                <CardContent>
-                                                    <p className="text-sm text-muted-foreground">{plotPoint.description || "Keine Beschreibung"}</p>
-                                                </CardContent>
-                                            </Card>
-                                        ))}
-                                    </div>
-                                </div>
+                                <PlotTab
+                                    bookId={book.id}
+                                    plotPoints={book.plotPoints}
+                                    onEdit={(point) => {
+                                        setEditingPlotPoint(point);
+                                        setShowPlotForm(true);
+                                    }}
+                                    onDelete={handlePlotPointDelete}
+                                    onCreate={() => {
+                                        setEditingPlotPoint(null);
+                                        setShowPlotForm(true);
+                                    }}
+                                    onSave={handlePlotPointSave}
+                                />
                             )}
 
                             {activeTab === "world" && (
-                                <div className="space-y-6">
-                                    <div className="flex items-center justify-between">
-                                        <h2 className="text-2xl font-bold font-serif">Welt & Lore</h2>
-                                        <Button onClick={() => setShowWorldForm(true)} className="shadow-lg shadow-primary/20">
-                                            <Plus className="mr-2 h-4 w-4" />
-                                            Neues Element
-                                        </Button>
-                                    </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                        {book.worldElements.map((element) => (
-                                            <Card
-                                                key={element.id}
-                                                className="cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-300 overflow-hidden bg-card/60 backdrop-blur"
-                                                onClick={() => {
-                                                    setEditingWorldElement(element);
-                                                    setShowWorldForm(true);
-                                                }}
-                                            >
-                                                <div className="aspect-video w-full bg-secondary/50 relative overflow-hidden">
-                                                    {element.imageUrl ? (
-                                                        <img
-                                                            src={element.imageUrl}
-                                                            alt={element.name}
-                                                            className="w-full h-full object-cover"
-                                                        />
-                                                    ) : (
-                                                        <div className="flex flex-col items-center justify-center w-full h-full text-muted-foreground/40">
-                                                            <Globe className="h-8 w-8 mb-2" />
-                                                            <span className="text-xs uppercase tracking-widest opacity-70">Kein Bild</span>
-                                                        </div>
-                                                    )}
-                                                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                                                    <div className="absolute bottom-4 left-4 right-4">
-                                                        <span className="inline-block px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wide bg-background/80 backdrop-blur text-foreground mb-1">
-                                                            {element.type}
-                                                        </span>
-                                                        <h3 className="font-bold text-lg text-white text-shadow-sm">{element.name}</h3>
-                                                    </div>
-                                                </div>
-                                                <CardContent className="p-4 relative">
-                                                    <p className="text-sm text-muted-foreground line-clamp-3">
-                                                        {element.description || "Keine Beschreibung"}
-                                                    </p>
-                                                    <Button
-                                                        size="icon"
-                                                        variant="ghost"
-                                                        className="absolute top-2 right-2 h-7 w-7 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleWorldElementDelete(element.id);
-                                                        }}
-                                                    >
-                                                        <Trash2 className="h-3.5 w-3.5" />
-                                                    </Button>
-                                                </CardContent>
-                                            </Card>
-                                        ))}
-                                    </div>
-                                </div>
+                                <WorldTab
+                                    worldElements={book.worldElements}
+                                    onEdit={(element) => {
+                                        setEditingWorldElement(element);
+                                        setShowWorldForm(true);
+                                    }}
+                                    onDelete={handleWorldElementDelete}
+                                    onCreate={() => {
+                                        setEditingWorldElement(null);
+                                        setShowWorldForm(true);
+                                    }}
+                                />
                             )}
 
                             {activeTab === "preview" && (
@@ -849,22 +719,27 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
 
             {showPlotForm && (
                 <PlotPointForm
-                    open={showPlotForm}
-                    onOpenChange={setShowPlotForm}
-                    initialData={editingPlotPoint}
+                    bookId={book.id}
+                    plotPoint={editingPlotPoint || undefined}
                     onSave={handlePlotPointSave}
+                    onCancel={() => {
+                        setShowPlotForm(false);
+                        setEditingPlotPoint(null);
+                    }}
                 />
             )}
 
             {showWorldForm && (
                 <WorldElementForm
-                    open={showWorldForm}
-                    onOpenChange={setShowWorldForm}
-                    initialData={editingWorldElement}
+                    bookId={book.id}
+                    worldElement={editingWorldElement || undefined}
                     onSave={handleWorldElementSave}
+                    onCancel={() => {
+                        setShowWorldForm(false);
+                        setEditingWorldElement(null);
+                    }}
                 />
             )}
         </div>
     );
 }
-

@@ -1394,11 +1394,11 @@ function ContentPage({
                     text-align: justify;
                 }
 
-                .book-content p:first-of-type {
+                .book-content > p:first-of-type {
                     text-indent: 0;
                 }
 
-                .book-content p:first-of-type::first-letter {
+                .book-content > p:first-of-type::first-letter {
                     float: left;
                     font-size: 3.5em;
                     line-height: 0.85;
@@ -1409,7 +1409,7 @@ function ContentPage({
                     font-family: var(--font-crimson-pro), serif;
                 }
 
-                html.dark .book-content p:first-of-type::first-letter {
+                html.dark .book-content > p:first-of-type::first-letter {
                     color: #f59e0b;
                 }
 
@@ -1534,11 +1534,18 @@ function ContentPage({
                 }
 
                 /* Lists */
-                .book-content ul,
+                .book-content ul {
+                    margin: 1em 0;
+                    padding-left: 2em;
+                    text-indent: 0;
+                    list-style-type: disc;
+                }
+
                 .book-content ol {
                     margin: 1em 0;
                     padding-left: 2em;
                     text-indent: 0;
+                    list-style-type: decimal;
                 }
 
                 .book-content li {

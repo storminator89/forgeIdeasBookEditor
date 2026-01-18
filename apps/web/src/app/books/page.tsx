@@ -179,11 +179,13 @@ export default function BooksPage() {
 
                     <div className="flex items-center gap-2 w-full md:w-auto">
                         <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="sm" className="gap-2 rounded-xl">
-                                    <Filter className="h-4 w-4" />
-                                    Sortieren: {sortBy === "updated" ? "Zuletzt bearbeitet" : sortBy === "newest" ? "Neueste" : "Titel"}
-                                </Button>
+                            <DropdownMenuTrigger
+                                render={
+                                    <Button variant="ghost" size="sm" className="gap-2 rounded-xl" />
+                                }
+                            >
+                                <Filter className="h-4 w-4" />
+                                Sortieren: {sortBy === "updated" ? "Zuletzt bearbeitet" : sortBy === "newest" ? "Neueste" : "Titel"}
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-48 rounded-xl">
                                 <DropdownMenuLabel>Sortieren nach</DropdownMenuLabel>

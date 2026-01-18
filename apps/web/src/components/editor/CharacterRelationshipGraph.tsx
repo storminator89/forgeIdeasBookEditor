@@ -120,27 +120,30 @@ export default function CharacterRelationshipGraph({
             val: char.role === "protagonist" ? 3 : char.role === "antagonist" ? 2.5 : char.role === "supporting" ? 2 : 1.5,
             color: ROLE_COLORS[char.role] || ROLE_COLORS.minor,
         })),
-        links: characters.flatMap(char =>
-            char.relationsFrom.map(rel => ({
+        links: (characters || []).flatMap(char =>
+            (char.relationsFrom || []).map(rel => ({
                 source: char.id,
-                target: rel.relatedCharacter.id,
+                target: rel.relatedCharacter?.id,
                 relationType: rel.relationType,
                 description: rel.description,
                 color: RELATION_COLORS[rel.relationType] || RELATION_COLORS.colleague,
-            }))
+            })).filter(link => link.source && link.target)
         ),
     };
 
     // Custom node rendering
     const nodeCanvasObject = useCallback((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
-        const label = node.name;
+        const label = node.name || "";
         const fontSize = 12 / globalScale;
-        const nodeRadius = Math.sqrt(node.val) * 8;
+        const val = node.val || 1;
+        const nodeRadius = Math.sqrt(val) * 8;
+        const x = node.x || 0;
+        const y = node.y || 0;
 
         // Draw node circle
         ctx.beginPath();
-        ctx.arc(node.x, node.y, nodeRadius, 0, 2 * Math.PI, false);
-        ctx.fillStyle = node.color;
+        ctx.arc(x, y, nodeRadius, 0, 2 * Math.PI, false);
+        ctx.fillStyle = node.color || "#9ca3af";
         ctx.fill();
 
         // Draw border
@@ -153,12 +156,12 @@ export default function CharacterRelationshipGraph({
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillStyle = "#ffffff";
-        ctx.fillText(label.charAt(0).toUpperCase(), node.x, node.y);
+        ctx.fillText(label.charAt(0).toUpperCase(), x, y);
 
         // Draw label below
         ctx.font = `${fontSize}px Sans-serif`;
-        ctx.fillStyle = "currentColor";
-        ctx.fillText(label, node.x, node.y + nodeRadius + fontSize);
+        ctx.fillStyle = "#888888"; // Fallback color
+        ctx.fillText(label, x, y + nodeRadius + fontSize);
     }, []);
 
     // Custom link rendering
@@ -167,21 +170,28 @@ export default function CharacterRelationshipGraph({
         const end = link.target;
 
         if (typeof start !== "object" || typeof end !== "object") return;
+        if (!("x" in start) || !("y" in start) || !("x" in end) || !("y" in end)) return;
+
+        const sx = start.x as number;
+        const sy = start.y as number;
+        const ex = end.x as number;
+        const ey = end.y as number;
 
         // Draw link line
         ctx.beginPath();
-        ctx.moveTo(start.x, start.y);
-        ctx.lineTo(end.x, end.y);
-        ctx.strokeStyle = link.color;
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(ex, ey);
+        ctx.strokeStyle = link.color || "#6b7280";
         ctx.lineWidth = 2 / globalScale;
         ctx.stroke();
 
         // Draw arrow
-        const angle = Math.atan2(end.y - start.y, end.x - start.x);
-        const endRadius = Math.sqrt(end.val) * 8;
+        const angle = Math.atan2(ey - sy, ex - sx);
+        const endVal = (end as any).val || 1;
+        const endRadius = Math.sqrt(endVal) * 8;
         const arrowLength = 8 / globalScale;
-        const arrowX = end.x - Math.cos(angle) * (endRadius + 5);
-        const arrowY = end.y - Math.sin(angle) * (endRadius + 5);
+        const arrowX = ex - Math.cos(angle) * (endRadius + 5);
+        const arrowY = ey - Math.sin(angle) * (endRadius + 5);
 
         ctx.beginPath();
         ctx.moveTo(arrowX, arrowY);
@@ -194,12 +204,14 @@ export default function CharacterRelationshipGraph({
             arrowY - arrowLength * Math.sin(angle + Math.PI / 6)
         );
         ctx.closePath();
-        ctx.fillStyle = link.color;
+        ctx.fillStyle = link.color || "#6b7280";
         ctx.fill();
     }, []);
 
     const handleNodeClick = useCallback((node: any) => {
-        onNodeClick(node.id);
+        if (node && node.id) {
+            onNodeClick(node.id);
+        }
     }, [onNodeClick]);
 
     // Center graph on mount

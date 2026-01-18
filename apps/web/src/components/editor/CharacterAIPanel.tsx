@@ -43,6 +43,7 @@ interface CharacterAIPanelProps {
 export default function CharacterAIPanel({
     bookId,
     onCharacterCreated,
+    onCharacterUpdated,
 }: CharacterAIPanelProps) {
     const [prompt, setPrompt] = useState("");
     const [isLoading, setIsLoading] = useState(false);
