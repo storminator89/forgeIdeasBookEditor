@@ -26,6 +26,9 @@ import {
     Trash2,
     ImageIcon,
     GripVertical,
+    LayoutGrid,
+    GitBranch,
+    Link2,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -36,6 +39,9 @@ import PlotPointForm from "@/components/editor/PlotPointForm";
 import WorldElementForm from "@/components/editor/WorldElementForm";
 import CharacterAIPanel, { CharacterEnhanceButton } from "@/components/editor/CharacterAIPanel";
 import BookPreview from "@/components/editor/BookPreview";
+import CharacterRelationModal from "@/components/editor/CharacterRelationModal";
+import CharacterRelationshipGraph from "@/components/editor/CharacterRelationshipGraph";
+import ConsistencyCheckPanel from "@/components/editor/ConsistencyCheckPanel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -45,6 +51,18 @@ type Chapter = {
     orderIndex: number;
     status: string;
     wordCount: number;
+};
+
+type CharacterRelation = {
+    id: string;
+    relationType: string;
+    description: string | null;
+    relatedCharacter: {
+        id: string;
+        name: string;
+        role: string;
+        imageUrl: string | null;
+    };
 };
 
 type Character = {
@@ -59,6 +77,18 @@ type Character = {
     arc: string | null;
     notes: string | null;
     imageUrl: string | null;
+    relationsFrom?: CharacterRelation[];
+    relationsTo?: Array<{
+        id: string;
+        relationType: string;
+        description: string | null;
+        character: {
+            id: string;
+            name: string;
+            role: string;
+            imageUrl: string | null;
+        };
+    }>;
 };
 
 type PlotPoint = {
@@ -123,6 +153,11 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
     const [editingPlotPoint, setEditingPlotPoint] = useState<PlotPoint | null>(null);
     const [showWorldForm, setShowWorldForm] = useState(false);
     const [editingWorldElement, setEditingWorldElement] = useState<WorldElement | null>(null);
+
+    // Character relationships state
+    const [characterViewMode, setCharacterViewMode] = useState<"cards" | "graph">("cards");
+    const [showRelationModal, setShowRelationModal] = useState(false);
+    const [editingRelationsCharacter, setEditingRelationsCharacter] = useState<Character | null>(null);
 
     // Book editing state
     const [isEditingBook, setIsEditingBook] = useState(false);
@@ -817,6 +852,17 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
                                     )}
                                 </CardContent>
                             </Card>
+
+                            {/* Consistency Check */}
+                            <ConsistencyCheckPanel
+                                bookId={book.id}
+                                onNavigateToChapter={(chapterIndex) => {
+                                    const chapter = book.chapters[chapterIndex];
+                                    if (chapter) {
+                                        router.push(`/books/${book.id}/chapter/${chapter.id}` as Route);
+                                    }
+                                }}
+                            />
                         </div>
                     )}
                     {/* End Main Content Wrapper */}
@@ -918,10 +964,35 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
                         <div className="space-y-6">
                             <div className="flex items-center justify-between">
                                 <h1 className="text-2xl font-bold">Charaktere</h1>
-                                <Button onClick={() => setShowCharacterForm(true)}>
-                                    <Plus className="mr-2 h-4 w-4" />
-                                    Neuer Charakter
-                                </Button>
+                                <div className="flex items-center gap-2">
+                                    {/* View Toggle */}
+                                    {book.characters.length > 0 && (
+                                        <div className="flex items-center border rounded-lg p-1 bg-muted/50">
+                                            <Button
+                                                variant={characterViewMode === "cards" ? "default" : "ghost"}
+                                                size="sm"
+                                                onClick={() => setCharacterViewMode("cards")}
+                                                className="h-8"
+                                            >
+                                                <LayoutGrid className="h-4 w-4 mr-1" />
+                                                Karten
+                                            </Button>
+                                            <Button
+                                                variant={characterViewMode === "graph" ? "default" : "ghost"}
+                                                size="sm"
+                                                onClick={() => setCharacterViewMode("graph")}
+                                                className="h-8"
+                                            >
+                                                <GitBranch className="h-4 w-4 mr-1" />
+                                                Beziehungen
+                                            </Button>
+                                        </div>
+                                    )}
+                                    <Button onClick={() => setShowCharacterForm(true)}>
+                                        <Plus className="mr-2 h-4 w-4" />
+                                        Neuer Charakter
+                                    </Button>
+                                </div>
                             </div>
                             {book.characters.length === 0 ? (
                                 <Card className="border-dashed">
@@ -937,7 +1008,29 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
                                         </Button>
                                     </CardContent>
                                 </Card>
+                            ) : characterViewMode === "graph" ? (
+                                /* Graph View */
+                                <Card className="overflow-hidden">
+                                    <CardContent className="p-0">
+                                        <CharacterRelationshipGraph
+                                            characters={book.characters.map(c => ({
+                                                ...c,
+                                                relationsFrom: (c as any).relationsFrom || [],
+                                                relationsTo: (c as any).relationsTo || [],
+                                            }))}
+                                            onNodeClick={(characterId) => {
+                                                const character = book.characters.find(c => c.id === characterId);
+                                                if (character) {
+                                                    setEditingRelationsCharacter(character as unknown as Character);
+                                                    setShowRelationModal(true);
+                                                }
+                                            }}
+                                            className="h-[600px]"
+                                        />
+                                    </CardContent>
+                                </Card>
                             ) : (
+                                /* Cards View */
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {book.characters.map((character) => (
                                         <Card
@@ -982,8 +1075,8 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
                                                         <span className="text-destructive text-xs">Löschen</span>
                                                     </Button>
                                                 </div>
-                                                {/* AI Enhance Button */}
-                                                <div className="mt-2 pt-2 border-t">
+                                                {/* Buttons row */}
+                                                <div className="mt-2 pt-2 border-t flex gap-2">
                                                     <CharacterEnhanceButton
                                                         bookId={book.id}
                                                         character={character as unknown as Character}
@@ -996,6 +1089,19 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
                                                             }));
                                                         }}
                                                     />
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="flex-1"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setEditingRelationsCharacter(character as unknown as Character);
+                                                            setShowRelationModal(true);
+                                                        }}
+                                                    >
+                                                        <Link2 className="h-4 w-4 mr-1" />
+                                                        Beziehungen
+                                                    </Button>
                                                 </div>
                                             </CardContent>
                                         </Card>
@@ -1266,6 +1372,39 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
                     onCancel={() => {
                         setShowWorldForm(false);
                         setEditingWorldElement(null);
+                    }}
+                />
+            )}
+
+            {/* Character Relation Modal */}
+            {showRelationModal && editingRelationsCharacter && (
+                <CharacterRelationModal
+                    character={{
+                        ...editingRelationsCharacter,
+                        relationsFrom: (editingRelationsCharacter as any).relationsFrom || [],
+                    }}
+                    allCharacters={book.characters.map(c => ({
+                        id: c.id,
+                        name: c.name,
+                        role: c.role,
+                        imageUrl: c.imageUrl,
+                    }))}
+                    bookId={book.id}
+                    onSave={() => {
+                        // Refresh characters to get updated relations
+                        fetch(`/api/books/${book.id}/characters`)
+                            .then(res => res.json())
+                            .then(updatedCharacters => {
+                                setBook(prev => ({
+                                    ...prev,
+                                    characters: updatedCharacters,
+                                }));
+                            })
+                            .catch(console.error);
+                    }}
+                    onClose={() => {
+                        setShowRelationModal(false);
+                        setEditingRelationsCharacter(null);
                     }}
                 />
             )}

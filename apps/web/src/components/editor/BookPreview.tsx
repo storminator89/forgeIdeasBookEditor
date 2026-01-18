@@ -1,12 +1,22 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Loader2, Download, Book } from "lucide-react";
+import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Loader2, Download, Book, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toJpeg } from "html-to-image";
 import { jsPDF } from "jspdf";
 import JSZip from "jszip";
+import {
+    Document,
+    Packer,
+    Paragraph,
+    TextRun,
+    HeadingLevel,
+    AlignmentType,
+    PageBreak,
+    ImageRun,
+} from "docx";
 
 interface Chapter {
     id: string;
@@ -42,6 +52,7 @@ export default function BookPreview({
     const [loadingChapterId, setLoadingChapterId] = useState<string | null>(null);
     const [isExporting, setIsExporting] = useState(false);
     const [isExportingEpub, setIsExportingEpub] = useState(false);
+    const [isExportingDocx, setIsExportingDocx] = useState(false);
     const bookRef = useRef<HTMLDivElement>(null);
 
     // Track which chapters we've already fetched to prevent re-fetching
@@ -782,6 +793,263 @@ blockquote {
         }
     };
 
+    // DOCX Export function
+    const exportToDocx = async () => {
+        if (isExporting || isExportingEpub || isExportingDocx || chapters.length === 0) return;
+
+        setIsExportingDocx(true);
+
+        try {
+            const orderedChapters = [...chapters].sort((a, b) => a.orderIndex - b.orderIndex);
+
+            // Load all chapter content if not already loaded
+            const chapterEntries = await Promise.all(
+                orderedChapters.map(async (chapter) => {
+                    if (loadedContent[chapter.id]) {
+                        return { ...chapter, content: loadedContent[chapter.id] };
+                    }
+                    if (chapter.content && chapter.content.trim()) {
+                        return chapter;
+                    }
+                    try {
+                        const response = await fetch(`/api/books/${bookId}/chapters/${chapter.id}`);
+                        if (response.ok) {
+                            const data = await response.json();
+                            return { ...chapter, content: data.content || "" };
+                        }
+                    } catch (error) {
+                        console.error("Failed to fetch chapter for DOCX:", error);
+                    }
+                    return chapter;
+                })
+            );
+
+            // Helper function to parse HTML and convert to docx paragraphs
+            const htmlToParagraphs = (html: string): Paragraph[] => {
+                if (!html || html.trim() === "") return [];
+
+                const paragraphs: Paragraph[] = [];
+
+                // Parse HTML
+                const tempDiv = document.createElement("div");
+                tempDiv.innerHTML = html;
+
+                const processNode = (node: Node): TextRun[] => {
+                    const runs: TextRun[] = [];
+
+                    if (node.nodeType === Node.TEXT_NODE) {
+                        const text = node.textContent || "";
+                        if (text.trim()) {
+                            runs.push(new TextRun({ text }));
+                        }
+                    } else if (node.nodeType === Node.ELEMENT_NODE) {
+                        const element = node as HTMLElement;
+                        const tagName = element.tagName.toLowerCase();
+
+                        // Handle different elements
+                        if (tagName === "strong" || tagName === "b") {
+                            const childText = element.textContent || "";
+                            runs.push(new TextRun({ text: childText, bold: true }));
+                        } else if (tagName === "em" || tagName === "i") {
+                            const childText = element.textContent || "";
+                            runs.push(new TextRun({ text: childText, italics: true }));
+                        } else if (tagName === "u") {
+                            const childText = element.textContent || "";
+                            runs.push(new TextRun({ text: childText, underline: {} }));
+                        } else if (tagName === "br") {
+                            runs.push(new TextRun({ text: "", break: 1 }));
+                        } else {
+                            // Process child nodes
+                            for (const child of Array.from(node.childNodes)) {
+                                runs.push(...processNode(child));
+                            }
+                        }
+                    }
+
+                    return runs;
+                };
+
+                const processElement = (element: Element) => {
+                    const tagName = element.tagName.toLowerCase();
+
+                    if (tagName === "h1") {
+                        paragraphs.push(new Paragraph({
+                            heading: HeadingLevel.HEADING_1,
+                            children: [new TextRun({ text: element.textContent || "", bold: true })],
+                            spacing: { before: 400, after: 200 },
+                        }));
+                    } else if (tagName === "h2") {
+                        paragraphs.push(new Paragraph({
+                            heading: HeadingLevel.HEADING_2,
+                            children: [new TextRun({ text: element.textContent || "", bold: true })],
+                            spacing: { before: 300, after: 150 },
+                        }));
+                    } else if (tagName === "h3") {
+                        paragraphs.push(new Paragraph({
+                            heading: HeadingLevel.HEADING_3,
+                            children: [new TextRun({ text: element.textContent || "", bold: true })],
+                            spacing: { before: 200, after: 100 },
+                        }));
+                    } else if (tagName === "p") {
+                        const runs = processNode(element);
+                        if (runs.length > 0) {
+                            paragraphs.push(new Paragraph({
+                                children: runs,
+                                spacing: { after: 200 },
+                                indent: { firstLine: 720 }, // 0.5 inch indent
+                            }));
+                        }
+                    } else if (tagName === "blockquote") {
+                        paragraphs.push(new Paragraph({
+                            children: [new TextRun({ text: element.textContent || "", italics: true })],
+                            spacing: { before: 200, after: 200 },
+                            indent: { left: 720, right: 720 },
+                        }));
+                    } else if (tagName === "ul" || tagName === "ol") {
+                        const listItems = element.querySelectorAll("li");
+                        listItems.forEach((li, index) => {
+                            const prefix = tagName === "ol" ? `${index + 1}. ` : "• ";
+                            paragraphs.push(new Paragraph({
+                                children: [new TextRun({ text: prefix + (li.textContent || "") })],
+                                indent: { left: 720 },
+                                spacing: { after: 100 },
+                            }));
+                        });
+                    } else {
+                        // For other elements, try to get text content
+                        const text = element.textContent?.trim();
+                        if (text) {
+                            paragraphs.push(new Paragraph({
+                                children: [new TextRun({ text })],
+                                spacing: { after: 200 },
+                            }));
+                        }
+                    }
+                };
+
+                // Process all top-level elements
+                for (const child of Array.from(tempDiv.children)) {
+                    processElement(child);
+                }
+
+                // If no block elements found, wrap text in paragraph
+                if (paragraphs.length === 0 && tempDiv.textContent?.trim()) {
+                    paragraphs.push(new Paragraph({
+                        children: [new TextRun({ text: tempDiv.textContent })],
+                        spacing: { after: 200 },
+                    }));
+                }
+
+                return paragraphs;
+            };
+
+            // Build document sections
+            const children: Paragraph[] = [];
+
+            // Title page
+            children.push(
+                new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    spacing: { before: 3000 },
+                    children: [
+                        new TextRun({
+                            text: bookTitle,
+                            bold: true,
+                            size: 72, // 36pt
+                        }),
+                    ],
+                }),
+                new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    spacing: { before: 400 },
+                    children: [
+                        new TextRun({
+                            text: author,
+                            size: 32, // 16pt
+                            italics: true,
+                        }),
+                    ],
+                }),
+                new Paragraph({
+                    children: [new PageBreak()],
+                })
+            );
+
+            // Add chapters
+            for (let i = 0; i < chapterEntries.length; i++) {
+                const chapter = chapterEntries[i];
+
+                // Chapter title
+                children.push(
+                    new Paragraph({
+                        heading: HeadingLevel.HEADING_1,
+                        alignment: AlignmentType.CENTER,
+                        spacing: { before: 600, after: 400 },
+                        children: [
+                            new TextRun({
+                                text: `Kapitel ${i + 1}`,
+                                size: 28, // 14pt
+                            }),
+                        ],
+                    }),
+                    new Paragraph({
+                        heading: HeadingLevel.HEADING_2,
+                        alignment: AlignmentType.CENTER,
+                        spacing: { after: 600 },
+                        children: [
+                            new TextRun({
+                                text: chapter.title,
+                                bold: true,
+                                size: 36, // 18pt
+                            }),
+                        ],
+                    })
+                );
+
+                // Chapter content
+                const contentParagraphs = htmlToParagraphs(chapter.content || "");
+                children.push(...contentParagraphs);
+
+                // Page break after each chapter (except last)
+                if (i < chapterEntries.length - 1) {
+                    children.push(new Paragraph({
+                        children: [new PageBreak()],
+                    }));
+                }
+            }
+
+            // Create document
+            const doc = new Document({
+                creator: author,
+                title: bookTitle,
+                description: `${bookTitle} by ${author}`,
+                sections: [
+                    {
+                        properties: {},
+                        children: children,
+                    },
+                ],
+            });
+
+            // Generate and download
+            const blob = await Packer.toBlob(doc);
+            const fileName = `${slugify(bookTitle)}.docx`;
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+        } catch (error) {
+            console.error("DOCX export failed:", error);
+        } finally {
+            setIsExportingDocx(false);
+        }
+    };
+
     return (
         <div
             className={cn(
@@ -804,13 +1072,29 @@ blockquote {
                 )}
             </Button>
 
+            {/* DOCX Export Button */}
+            <Button
+                variant="ghost"
+                size="icon"
+                className="absolute top-4 right-[8.5rem] z-10"
+                onClick={exportToDocx}
+                disabled={isExporting || isExportingEpub || isExportingDocx}
+                title="Als DOCX exportieren (für Lektoren)"
+            >
+                {isExportingDocx ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                    <FileText className="h-5 w-5" />
+                )}
+            </Button>
+
             {/* EPUB Export Button */}
             <Button
                 variant="ghost"
                 size="icon"
                 className="absolute top-4 right-24 z-10"
                 onClick={exportToEpub}
-                disabled={isExporting || isExportingEpub}
+                disabled={isExporting || isExportingEpub || isExportingDocx}
                 title="Als EPUB exportieren"
             >
                 {isExportingEpub ? (
@@ -826,7 +1110,7 @@ blockquote {
                 size="icon"
                 className="absolute top-4 right-14 z-10"
                 onClick={exportToPdf}
-                disabled={isExporting || isExportingEpub}
+                disabled={isExporting || isExportingEpub || isExportingDocx}
                 title="Als PDF exportieren"
             >
                 {isExporting ? (

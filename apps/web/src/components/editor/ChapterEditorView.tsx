@@ -18,6 +18,9 @@ import {
     Trash2,
     Check,
     AlignJustify,
+    Maximize2,
+    Minimize2,
+    X,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -147,6 +150,9 @@ export default function ChapterEditorView({
     const [useSummaryAsPrompt, setUseSummaryAsPrompt] = useState(true);
     const [targetLength, setTargetLength] = useState("medium");
 
+    // Focus mode state
+    const [isFocusMode, setIsFocusMode] = useState(false);
+
     // Calculate word count using getWordCount utility
     const wordCount = getWordCount(content);
 
@@ -154,6 +160,17 @@ export default function ChapterEditorView({
     const currentIndex = chapters.findIndex((c) => c.id === chapter.id);
     const prevChapter = currentIndex > 0 ? chapters[currentIndex - 1] : null;
     const nextChapter = currentIndex < chapters.length - 1 ? chapters[currentIndex + 1] : null;
+
+    // ESC key to exit focus mode
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape" && isFocusMode) {
+                setIsFocusMode(false);
+            }
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [isFocusMode]);
 
     // Auto-save
     const saveChapter = useCallback(async () => {
@@ -247,11 +264,11 @@ export default function ChapterEditorView({
     };
 
     return (
-        <div className="flex h-full">
+        <div className={`flex h-full transition-all duration-300 ${isFocusMode ? "bg-background" : ""}`}>
             {/* Main Editor */}
-            <div className="flex-1 flex flex-col">
-                {/* Header */}
-                <header className="border-b bg-card px-4 py-3 flex items-center justify-between">
+            <div className="flex-1 flex flex-col relative">
+                {/* Header - Hidden in Focus Mode */}
+                <header className={`border-b bg-card px-4 py-3 flex items-center justify-between transition-all duration-300 ${isFocusMode ? "opacity-0 h-0 overflow-hidden py-0 border-none" : "opacity-100"}`}>
                     <div className="flex items-center gap-4">
                         <Link
                             href={`/books/${chapter.bookId}` as Route}
@@ -293,6 +310,15 @@ export default function ChapterEditorView({
                             <Sparkles className="h-4 w-4" />
                             <span className="ml-2 hidden sm:inline">KI</span>
                         </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsFocusMode(true)}
+                            title="Fokus-Modus (ESC zum Beenden)"
+                        >
+                            <Maximize2 className="h-4 w-4" />
+                            <span className="ml-2 hidden sm:inline">Fokus</span>
+                        </Button>
                         <DropdownMenu>
                             <DropdownMenuTrigger className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-9 px-3">
                                 <MoreHorizontal className="h-4 w-4" />
@@ -328,8 +354,8 @@ export default function ChapterEditorView({
                             placeholder="Beginne mit dem Schreiben..."
                         />
 
-                        {/* Summary */}
-                        <div className="space-y-2 pt-4 border-t">
+                        {/* Summary - Hidden in Focus Mode */}
+                        <div className={`space-y-2 pt-4 border-t transition-all duration-300 ${isFocusMode ? "opacity-0 h-0 overflow-hidden pt-0 border-none" : "opacity-100"}`}>
                             <label className="text-sm font-medium text-muted-foreground">
                                 Zusammenfassung (für KI-Kontext)
                             </label>
@@ -341,8 +367,8 @@ export default function ChapterEditorView({
                             />
                         </div>
 
-                        {/* Notes */}
-                        <div className="space-y-2">
+                        {/* Notes - Hidden in Focus Mode */}
+                        <div className={`space-y-2 transition-all duration-300 ${isFocusMode ? "opacity-0 h-0 overflow-hidden" : "opacity-100"}`}>
                             <label className="text-sm font-medium text-muted-foreground">
                                 Notizen
                             </label>
@@ -356,8 +382,8 @@ export default function ChapterEditorView({
                     </div>
                 </div>
 
-                {/* Footer */}
-                <footer className="border-t bg-card px-4 py-3 flex items-center justify-between">
+                {/* Footer - Hidden in Focus Mode */}
+                <footer className={`border-t bg-card px-4 py-3 flex items-center justify-between transition-all duration-300 ${isFocusMode ? "opacity-0 h-0 overflow-hidden py-0 border-none" : "opacity-100"}`}>
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                         <span>{wordCount.toLocaleString("de-DE")} Wörter</span>
                         <select
@@ -391,10 +417,28 @@ export default function ChapterEditorView({
                         )}
                     </div>
                 </footer>
+
+                {/* Focus Mode Floating Controls */}
+                {isFocusMode && (
+                    <div className="fixed bottom-6 right-6 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                        {/* Word count badge */}
+                        <div className="bg-card/90 backdrop-blur-sm border rounded-full px-4 py-2 shadow-lg text-sm text-muted-foreground">
+                            {wordCount.toLocaleString("de-DE")} Wörter
+                        </div>
+                        {/* Exit focus mode button */}
+                        <Button
+                            onClick={() => setIsFocusMode(false)}
+                            className="rounded-full shadow-lg h-12 w-12 p-0"
+                            title="Fokus-Modus beenden (ESC)"
+                        >
+                            <Minimize2 className="h-5 w-5" />
+                        </Button>
+                    </div>
+                )}
             </div>
 
-            {/* AI Panel */}
-            {showAIPanel && (
+            {/* AI Panel - Hidden in Focus Mode */}
+            {showAIPanel && !isFocusMode && (
                 <aside className="w-96 border-l bg-card flex flex-col">
                     <div className="p-4 border-b">
                         <h2 className="font-semibold flex items-center gap-2">
