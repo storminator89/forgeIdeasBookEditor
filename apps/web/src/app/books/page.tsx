@@ -28,6 +28,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
+import { useI18n } from "@/components/locale-provider";
 
 type Book = {
     id: string;
@@ -43,6 +44,7 @@ type Book = {
 };
 
 export default function BooksPage() {
+    const { t, intlLocale } = useI18n();
     const [books, setBooks] = useState<Book[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
@@ -70,7 +72,10 @@ export default function BooksPage() {
         e.preventDefault(); // Prevent link navigation
         e.stopPropagation();
 
-        if (!confirm("Bist du sicher, dass du dieses Buch löschen möchtest? Alle Daten werden unwiderruflich gelöscht.")) {
+        if (!confirm(t({
+            de: "Bist du sicher, dass du dieses Buch löschen möchtest? Alle Daten werden unwiderruflich gelöscht.",
+            en: "Are you sure you want to delete this book? All data will be permanently removed.",
+        }))) {
             return;
         }
 
@@ -83,11 +88,11 @@ export default function BooksPage() {
             if (response.ok) {
                 setBooks((prev) => prev.filter((b) => b.id !== bookId));
             } else {
-                alert("Fehler beim Löschen des Buchs");
+                alert(t({ de: "Fehler beim Löschen des Buchs", en: "Failed to delete the book" }));
             }
         } catch (error) {
             console.error("Error deleting book:", error);
-            alert("Fehler beim Löschen des Buchs");
+            alert(t({ de: "Fehler beim Löschen des Buchs", en: "Failed to delete the book" }));
         } finally {
             setDeletingId(null);
         }
@@ -107,11 +112,19 @@ export default function BooksPage() {
         });
     }, [books, searchQuery, sortBy]);
 
+    const sortLabel = sortBy === "updated"
+        ? t({ de: "Zuletzt bearbeitet", en: "Recently updated" })
+        : sortBy === "newest"
+            ? t({ de: "Neueste", en: "Newest" })
+            : t({ de: "Titel", en: "Title" });
+
     if (isLoading) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh]">
                 <Loader2 className="h-10 w-10 animate-spin text-primary/50 mb-4" />
-                <p className="text-muted-foreground animate-pulse">Lade deine Bibliothek...</p>
+                <p className="text-muted-foreground animate-pulse">
+                    {t({ de: "Lade deine Bibliothek...", en: "Loading your library..." })}
+                </p>
             </div>
         );
     }
@@ -133,7 +146,7 @@ export default function BooksPage() {
                             animate={{ opacity: 1, y: 0 }}
                             className="text-4xl md:text-5xl font-serif font-bold tracking-tight bg-gradient-to-r from-foreground via-foreground to-muted-foreground bg-clip-text text-transparent"
                         >
-                            Deine Bibliothek
+                            {t({ de: "Deine Bibliothek", en: "Your library" })}
                         </motion.h1>
                         <motion.p
                             initial={{ opacity: 0, y: 20 }}
@@ -141,7 +154,10 @@ export default function BooksPage() {
                             transition={{ delay: 0.1 }}
                             className="text-lg text-muted-foreground max-w-lg"
                         >
-                            Verwalte deine Buchprojekte und erschaffe neue Welten mit KI-Unterstützung.
+                            {t({
+                                de: "Verwalte deine Buchprojekte und erschaffe neue Welten mit KI-Unterstützung.",
+                                en: "Manage your book projects and create new worlds with AI support.",
+                            })}
                         </motion.p>
                     </div>
 
@@ -154,7 +170,7 @@ export default function BooksPage() {
                         <Link href={"/books/new" as Route}>
                             <Button size="lg" className="rounded-full shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all">
                                 <Plus className="h-5 w-5 mr-2" />
-                                Neues Buch
+                                {t({ de: "Neues Buch", en: "New book" })}
                             </Button>
                         </Link>
                     </motion.div>
@@ -170,7 +186,7 @@ export default function BooksPage() {
                     <div className="relative w-full md:w-96 group">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                         <Input
-                            placeholder="Suchen nach Titel, Genre..."
+                            placeholder={t({ de: "Suchen nach Titel, Genre...", en: "Search by title, genre..." })}
                             className="pl-9 bg-secondary/50 border-transparent focus:bg-background focus:border-input transition-all rounded-xl"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
@@ -185,19 +201,19 @@ export default function BooksPage() {
                                 }
                             >
                                 <Filter className="h-4 w-4" />
-                                Sortieren: {sortBy === "updated" ? "Zuletzt bearbeitet" : sortBy === "newest" ? "Neueste" : "Titel"}
+                                {t({ de: "Sortieren", en: "Sort" })}: {sortLabel}
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-48 rounded-xl">
-                                <DropdownMenuLabel>Sortieren nach</DropdownMenuLabel>
+                                <DropdownMenuLabel>{t({ de: "Sortieren nach", en: "Sort by" })}</DropdownMenuLabel>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem onClick={() => setSortBy("updated")}>
-                                    Zuletzt bearbeitet
+                                    {t({ de: "Zuletzt bearbeitet", en: "Recently updated" })}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => setSortBy("newest")}>
-                                    Erstellt am
+                                    {t({ de: "Erstellt am", en: "Date created" })}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => setSortBy("title")}>
-                                    Titel (A-Z)
+                                    {t({ de: "Titel (A-Z)", en: "Title (A-Z)" })}
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
@@ -214,14 +230,19 @@ export default function BooksPage() {
                         <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-muted to-secondary flex items-center justify-center mb-6">
                             <BookOpen className="h-10 w-10 text-muted-foreground opacity-50" />
                         </div>
-                        <h3 className="text-xl font-semibold mb-2">Deine Bibliothek ist leer</h3>
+                        <h3 className="text-xl font-semibold mb-2">
+                            {t({ de: "Deine Bibliothek ist leer", en: "Your library is empty" })}
+                        </h3>
                         <p className="text-muted-foreground max-w-md mb-8">
-                            Der Anfang ist oft das Schwerste. Erstelle dein erstes Buchprojekt und lass deiner Kreativität freien Lauf.
+                            {t({
+                                de: "Der Anfang ist oft das Schwerste. Erstelle dein erstes Buchprojekt und lass deiner Kreativität freien Lauf.",
+                                en: "The beginning is often the hardest. Create your first book project and let your creativity run free.",
+                            })}
                         </p>
                         <Link href={"/books/new" as Route}>
                             <Button variant="outline" className="gap-2">
                                 <Plus className="h-4 w-4" />
-                                Erstes Buch erstellen
+                                {t({ de: "Erstes Buch erstellen", en: "Create your first book" })}
                             </Button>
                         </Link>
                     </motion.div>
@@ -297,11 +318,11 @@ export default function BooksPage() {
                                                     <div className="flex items-center gap-4 text-xs text-muted-foreground mb-3">
                                                         <div className="flex items-center gap-1">
                                                             <BookOpen className="h-3 w-3" />
-                                                            <span>{book._count.chapters} Kap.</span>
+                                                            <span>{book._count.chapters} {t({ de: "Kap.", en: "Ch." })}</span>
                                                         </div>
                                                         <div className="flex items-center gap-1">
                                                             <Users className="h-3 w-3" />
-                                                            <span>{book._count.characters} Char.</span>
+                                                            <span>{book._count.characters} {t({ de: "Char.", en: "Chars." })}</span>
                                                         </div>
                                                     </div>
 
@@ -314,10 +335,10 @@ export default function BooksPage() {
                                                     <div className="flex items-center justify-between pt-3 border-t border-border/50">
                                                         <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
                                                             <Calendar className="h-3 w-3" />
-                                                            <span>{new Date(book.updatedAt).toLocaleDateString()}</span>
+                                                            <span>{new Date(book.updatedAt).toLocaleDateString(intlLocale)}</span>
                                                         </div>
                                                         <div className="flex items-center text-primary text-xs font-medium opacity-0 group-hover:opacity-100 transition-all transform translate-x-[-10px] group-hover:translate-x-0">
-                                                            Öffnen <ArrowUpRight className="ml-1 h-3 w-3" />
+                                                            {t({ de: "Öffnen", en: "Open" })} <ArrowUpRight className="ml-1 h-3 w-3" />
                                                         </div>
                                                     </div>
                                                 </div>

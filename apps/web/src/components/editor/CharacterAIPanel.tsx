@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { Loader2, Sparkles, Wand2, Check, X, UserPlus, Upload, Image as ImageIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useI18n } from "@/components/locale-provider";
 
 type Character = {
     id: string;
@@ -45,6 +46,7 @@ export default function CharacterAIPanel({
     onCharacterCreated,
     onCharacterUpdated,
 }: CharacterAIPanelProps) {
+    const { t } = useI18n();
     const [prompt, setPrompt] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -53,9 +55,16 @@ export default function CharacterAIPanel({
     const [isUploading, setIsUploading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    const roles = useMemo(() => ([
+        { value: "protagonist", label: t({ de: "Protagonist", en: "Protagonist" }) },
+        { value: "antagonist", label: t({ de: "Antagonist", en: "Antagonist" }) },
+        { value: "supporting", label: t({ de: "Nebenrolle", en: "Supporting" }) },
+        { value: "minor", label: t({ de: "Kleine Rolle", en: "Minor" }) },
+    ]), [t]);
+
     const handleGenerate = async () => {
         if (!prompt.trim()) {
-            setError("Bitte gib eine Beschreibung ein");
+            setError(t({ de: "Bitte gib eine Beschreibung ein", en: "Please enter a description" }));
             return;
         }
 
@@ -75,13 +84,13 @@ export default function CharacterAIPanel({
 
             if (!response.ok) {
                 const data = await response.json();
-                throw new Error(data.error || "Fehler bei der Generierung");
+                throw new Error(data.error || t({ de: "Fehler bei der Generierung", en: "Generation failed" }));
             }
 
             const data = await response.json();
             setPreview(data.character);
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Unbekannter Fehler");
+            setError(err instanceof Error ? err.message : t({ de: "Unbekannter Fehler", en: "Unknown error" }));
         } finally {
             setIsLoading(false);
         }
@@ -102,13 +111,13 @@ export default function CharacterAIPanel({
             });
 
             if (!response.ok) {
-                throw new Error("Upload fehlgeschlagen");
+                throw new Error(t({ de: "Upload fehlgeschlagen", en: "Upload failed" }));
             }
 
             const data = await response.json();
             setPreview({ ...preview, imageUrl: data.url });
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Upload-Fehler");
+            setError(err instanceof Error ? err.message : t({ de: "Upload-Fehler", en: "Upload error" }));
         } finally {
             setIsUploading(false);
         }
@@ -128,7 +137,7 @@ export default function CharacterAIPanel({
             });
 
             if (!response.ok) {
-                throw new Error("Fehler beim Speichern");
+                throw new Error(t({ de: "Fehler beim Speichern", en: "Failed to save" }));
             }
 
             const savedCharacter = await response.json();
@@ -136,7 +145,7 @@ export default function CharacterAIPanel({
             setPreview(null);
             setPrompt("");
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Fehler beim Speichern");
+            setError(err instanceof Error ? err.message : t({ de: "Fehler beim Speichern", en: "Failed to save" }));
         } finally {
             setIsSaving(false);
         }
@@ -158,10 +167,13 @@ export default function CharacterAIPanel({
             <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-lg">
                     <Sparkles className="h-5 w-5 text-violet-500" />
-                    KI-Charakter-Assistent
+                    {t({ de: "KI-Charakter-Assistent", en: "AI character assistant" })}
                 </CardTitle>
                 <CardDescription>
-                    Beschreibe, welchen Charakter du brauchst - die KI erstellt ihn passend zu deinem Buch.
+                    {t({
+                        de: "Beschreibe, welchen Charakter du brauchst - die KI erstellt ihn passend zu deinem Buch.",
+                        en: "Describe the character you need - the AI will create one that fits your book.",
+                    })}
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -171,7 +183,10 @@ export default function CharacterAIPanel({
                             <Input
                                 value={prompt}
                                 onChange={(e) => setPrompt(e.target.value)}
-                                placeholder="z.B. 'Erstelle einen mysteriösen Antagonisten' oder 'Füge eine weise Mentorin hinzu'"
+                                placeholder={t({
+                                    de: "z.B. 'Erstelle einen mysteriösen Antagonisten' oder 'Füge eine weise Mentorin hinzu'",
+                                    en: "e.g. 'Create a mysterious antagonist' or 'Add a wise mentor'",
+                                })}
                                 onKeyDown={(e) => e.key === "Enter" && handleGenerate()}
                                 disabled={isLoading}
                             />
@@ -211,7 +226,7 @@ export default function CharacterAIPanel({
                                     ) : (
                                         <div className="text-center">
                                             <ImageIcon className="h-6 w-6 text-white mx-auto" />
-                                            <span className="text-[10px] text-white/80">Foto</span>
+                                            <span className="text-[10px] text-white/80">{t({ de: "Foto", en: "Photo" })}</span>
                                         </div>
                                     )}
                                     <input
@@ -225,7 +240,7 @@ export default function CharacterAIPanel({
 
                                 <div className="flex-1 space-y-2">
                                     <div>
-                                        <label className="text-xs text-muted-foreground">Name</label>
+                                        <label className="text-xs text-muted-foreground">{t({ de: "Name", en: "Name" })}</label>
                                         <Input
                                             value={preview.name}
                                             onChange={(e) => updatePreview("name", e.target.value)}
@@ -233,16 +248,17 @@ export default function CharacterAIPanel({
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-xs text-muted-foreground">Rolle</label>
+                                        <label className="text-xs text-muted-foreground">{t({ de: "Rolle", en: "Role" })}</label>
                                         <select
                                             value={preview.role}
                                             onChange={(e) => updatePreview("role", e.target.value)}
                                             className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm"
                                         >
-                                            <option value="protagonist">Protagonist</option>
-                                            <option value="antagonist">Antagonist</option>
-                                            <option value="supporting">Nebenrolle</option>
-                                            <option value="minor">Kleine Rolle</option>
+                                            {roles.map((roleOption) => (
+                                                <option key={roleOption.value} value={roleOption.value}>
+                                                    {roleOption.label}
+                                                </option>
+                                            ))}
                                         </select>
                                     </div>
                                 </div>
@@ -251,7 +267,7 @@ export default function CharacterAIPanel({
                             {/* Other editable fields */}
                             <div className="space-y-2 text-sm">
                                 <div>
-                                    <label className="text-xs text-muted-foreground">Beschreibung</label>
+                                    <label className="text-xs text-muted-foreground">{t({ de: "Beschreibung", en: "Description" })}</label>
                                     <textarea
                                         value={preview.description}
                                         onChange={(e) => updatePreview("description", e.target.value)}
@@ -259,7 +275,7 @@ export default function CharacterAIPanel({
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-xs text-muted-foreground">Persönlichkeit</label>
+                                    <label className="text-xs text-muted-foreground">{t({ de: "Persönlichkeit", en: "Personality" })}</label>
                                     <textarea
                                         value={preview.personality}
                                         onChange={(e) => updatePreview("personality", e.target.value)}
@@ -267,7 +283,7 @@ export default function CharacterAIPanel({
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-xs text-muted-foreground">Motivation</label>
+                                    <label className="text-xs text-muted-foreground">{t({ de: "Motivation", en: "Motivation" })}</label>
                                     <textarea
                                         value={preview.motivation}
                                         onChange={(e) => updatePreview("motivation", e.target.value)}
@@ -286,7 +302,7 @@ export default function CharacterAIPanel({
                         <div className="flex gap-2">
                             <Button variant="outline" onClick={handleCancel} disabled={isSaving} className="flex-1">
                                 <X className="h-4 w-4 mr-2" />
-                                Verwerfen
+                                {t({ de: "Verwerfen", en: "Discard" })}
                             </Button>
                             <Button onClick={handleSave} disabled={isSaving} className="flex-1">
                                 {isSaving ? (
@@ -294,7 +310,7 @@ export default function CharacterAIPanel({
                                 ) : (
                                     <Check className="h-4 w-4 mr-2" />
                                 )}
-                                Speichern
+                                {t({ de: "Speichern", en: "Save" })}
                             </Button>
                         </div>
                     </div>
@@ -316,6 +332,14 @@ export function CharacterEnhanceButton({
     character,
     onUpdate,
 }: CharacterEnhanceButtonProps) {
+    const { t } = useI18n();
+    const roles = useMemo(() => ([
+        { value: "protagonist", label: t({ de: "Protagonist", en: "Protagonist" }) },
+        { value: "antagonist", label: t({ de: "Antagonist", en: "Antagonist" }) },
+        { value: "supporting", label: t({ de: "Nebenrolle", en: "Supporting" }) },
+        { value: "minor", label: t({ de: "Kleine Rolle", en: "Minor" }) },
+    ]), [t]);
+
     const [isOpen, setIsOpen] = useState(false);
     const [prompt, setPrompt] = useState("");
     const [isLoading, setIsLoading] = useState(false);
@@ -342,13 +366,13 @@ export function CharacterEnhanceButton({
 
             if (!response.ok) {
                 const data = await response.json();
-                throw new Error(data.error || "Fehler bei der Verbesserung");
+                throw new Error(data.error || t({ de: "Fehler bei der Verbesserung", en: "Improvement failed" }));
             }
 
             const data = await response.json();
             setPreview(data.character);
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Unbekannter Fehler");
+            setError(err instanceof Error ? err.message : t({ de: "Unbekannter Fehler", en: "Unknown error" }));
         } finally {
             setIsLoading(false);
         }
@@ -368,7 +392,7 @@ export function CharacterEnhanceButton({
             });
 
             if (!response.ok) {
-                throw new Error("Fehler beim Speichern");
+                throw new Error(t({ de: "Fehler beim Speichern", en: "Failed to save" }));
             }
 
             const updatedCharacter = await response.json();
@@ -377,7 +401,7 @@ export function CharacterEnhanceButton({
             setPreview(null);
             setPrompt("");
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Fehler beim Speichern");
+            setError(err instanceof Error ? err.message : t({ de: "Fehler beim Speichern", en: "Failed to save" }));
         } finally {
             setIsSaving(false);
         }
@@ -401,7 +425,7 @@ export function CharacterEnhanceButton({
                 className="h-8 gap-1.5"
             >
                 <Wand2 className="h-3.5 w-3.5" />
-                Mit KI bearbeiten
+                {t({ de: "Mit KI bearbeiten", en: "Edit with AI" })}
             </Button>
         );
     }
@@ -420,10 +444,10 @@ export function CharacterEnhanceButton({
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <Wand2 className="h-5 w-5 text-violet-500" />
-                        {character.name} verbessern
+                        {t({ de: "{{name}} verbessern", en: "Improve {{name}}" }, { name: character.name })}
                     </CardTitle>
                     <CardDescription>
-                        Beschreibe, wie der Charakter verändert werden soll.
+                        {t({ de: "Beschreibe, wie der Charakter verändert werden soll.", en: "Describe how the character should change." })}
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -432,7 +456,10 @@ export function CharacterEnhanceButton({
                             <Input
                                 value={prompt}
                                 onChange={(e) => setPrompt(e.target.value)}
-                                placeholder="z.B. 'Mach ihn mysteriöser' oder 'Füge eine tragische Hintergrundgeschichte hinzu'"
+                                placeholder={t({
+                                    de: "z.B. 'Mach ihn mysteriöser' oder 'Füge eine tragische Hintergrundgeschichte hinzu'",
+                                    en: "e.g. 'Make them more mysterious' or 'Add a tragic backstory'",
+                                })}
                                 onKeyDown={(e) => e.key === "Enter" && handleEnhance()}
                                 disabled={isLoading}
                                 autoFocus
@@ -446,7 +473,7 @@ export function CharacterEnhanceButton({
 
                             <div className="flex gap-2">
                                 <Button variant="outline" onClick={() => setIsOpen(false)} className="flex-1">
-                                    Abbrechen
+                                    {t({ de: "Abbrechen", en: "Cancel" })}
                                 </Button>
                                 <Button onClick={handleEnhance} disabled={isLoading || !prompt.trim()} className="flex-1">
                                     {isLoading ? (
@@ -454,7 +481,7 @@ export function CharacterEnhanceButton({
                                     ) : (
                                         <Sparkles className="h-4 w-4 mr-2" />
                                     )}
-                                    Generieren
+                                    {t({ de: "Generieren", en: "Generate" })}
                                 </Button>
                             </div>
                         </>
@@ -464,7 +491,7 @@ export function CharacterEnhanceButton({
                             <div className="p-4 rounded-lg border bg-muted/50 space-y-3">
                                 <div className="space-y-2">
                                     <div>
-                                        <label className="text-xs text-muted-foreground">Name</label>
+                                        <label className="text-xs text-muted-foreground">{t({ de: "Name", en: "Name" })}</label>
                                         <Input
                                             value={preview.name}
                                             onChange={(e) => updatePreview("name", e.target.value)}
@@ -472,23 +499,24 @@ export function CharacterEnhanceButton({
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-xs text-muted-foreground">Rolle</label>
+                                        <label className="text-xs text-muted-foreground">{t({ de: "Rolle", en: "Role" })}</label>
                                         <select
                                             value={preview.role}
                                             onChange={(e) => updatePreview("role", e.target.value)}
                                             className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm"
                                         >
-                                            <option value="protagonist">Protagonist</option>
-                                            <option value="antagonist">Antagonist</option>
-                                            <option value="supporting">Nebenrolle</option>
-                                            <option value="minor">Kleine Rolle</option>
+                                            {roles.map((roleOption) => (
+                                                <option key={roleOption.value} value={roleOption.value}>
+                                                    {roleOption.label}
+                                                </option>
+                                            ))}
                                         </select>
                                     </div>
                                 </div>
 
                                 <div className="space-y-2 text-sm">
                                     <div>
-                                        <label className="text-xs text-muted-foreground">Beschreibung</label>
+                                        <label className="text-xs text-muted-foreground">{t({ de: "Beschreibung", en: "Description" })}</label>
                                         <textarea
                                             value={preview.description}
                                             onChange={(e) => updatePreview("description", e.target.value)}
@@ -496,7 +524,7 @@ export function CharacterEnhanceButton({
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-xs text-muted-foreground">Persönlichkeit</label>
+                                        <label className="text-xs text-muted-foreground">{t({ de: "Persönlichkeit", en: "Personality" })}</label>
                                         <textarea
                                             value={preview.personality}
                                             onChange={(e) => updatePreview("personality", e.target.value)}
@@ -504,7 +532,7 @@ export function CharacterEnhanceButton({
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-xs text-muted-foreground">Motivation</label>
+                                        <label className="text-xs text-muted-foreground">{t({ de: "Motivation", en: "Motivation" })}</label>
                                         <textarea
                                             value={preview.motivation}
                                             onChange={(e) => updatePreview("motivation", e.target.value)}
@@ -512,7 +540,7 @@ export function CharacterEnhanceButton({
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-xs text-muted-foreground">Hintergrund</label>
+                                        <label className="text-xs text-muted-foreground">{t({ de: "Hintergrund", en: "Backstory" })}</label>
                                         <textarea
                                             value={preview.backstory}
                                             onChange={(e) => updatePreview("backstory", e.target.value)}
@@ -530,7 +558,7 @@ export function CharacterEnhanceButton({
 
                             <div className="flex gap-2">
                                 <Button variant="outline" onClick={() => setPreview(null)} disabled={isSaving} className="flex-1">
-                                    Zurück
+                                    {t({ de: "Zurück", en: "Back" })}
                                 </Button>
                                 <Button onClick={handleSave} disabled={isSaving} className="flex-1">
                                     {isSaving ? (
@@ -538,7 +566,7 @@ export function CharacterEnhanceButton({
                                     ) : (
                                         <Check className="h-4 w-4 mr-2" />
                                     )}
-                                    Übernehmen
+                                    {t({ de: "Übernehmen", en: "Apply" })}
                                 </Button>
                             </div>
                         </>

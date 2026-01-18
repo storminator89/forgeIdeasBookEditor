@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import StoryWizard from "@/components/wizard/StoryWizard";
+import { useI18n } from "@/components/locale-provider";
 
 type AISettings = {
     apiEndpoint: string;
@@ -21,6 +22,7 @@ type AISettings = {
 type CreationMode = "select" | "manual" | "wizard" | "import";
 
 export default function NewBookPage() {
+    const { t } = useI18n();
     const router = useRouter();
     const [mode, setMode] = useState<CreationMode>("select");
     const [isLoading, setIsLoading] = useState(false);
@@ -138,14 +140,14 @@ export default function NewBookPage() {
             } else {
                 setImportResult({
                     success: false,
-                    message: data.error || "Import fehlgeschlagen",
+                    message: data.error || t({ de: "Import fehlgeschlagen", en: "Import failed" }),
                 });
             }
         } catch (error) {
             console.error("Import error:", error);
             setImportResult({
                 success: false,
-                message: "Ein unerwarteter Fehler ist aufgetreten",
+                message: t({ de: "Ein unerwarteter Fehler ist aufgetreten", en: "An unexpected error occurred" }),
             });
         } finally {
             setIsImporting(false);
@@ -164,12 +166,15 @@ export default function NewBookPage() {
             <div className="container mx-auto py-8 px-4 max-w-4xl">
                 <Link href={"/books" as Route} className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 transition-colors">
                     <ArrowLeft className="h-4 w-4" />
-                    Zurück zur Übersicht
+                    {t({ de: "Zurück zur Übersicht", en: "Back to overview" })}
                 </Link>
 
-                <h1 className="text-3xl font-bold mb-2">Neues Buch erstellen</h1>
+                <h1 className="text-3xl font-bold mb-2">{t({ de: "Neues Buch erstellen", en: "Create a new book" })}</h1>
                 <p className="text-muted-foreground mb-8">
-                    Wähle, wie du dein neues Buchprojekt starten möchtest.
+                    {t({
+                        de: "Wähle, wie du dein neues Buchprojekt starten möchtest.",
+                        en: "Choose how you'd like to start your new book project.",
+                    })}
                 </p>
 
                 <div className="grid md:grid-cols-3 gap-6">
@@ -183,35 +188,38 @@ export default function NewBookPage() {
                             <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center mb-4">
                                 <Sparkles className="h-6 w-6 text-white" />
                             </div>
-                            <CardTitle>Mit KI-Assistent</CardTitle>
+                            <CardTitle>{t({ de: "Mit KI-Assistent", en: "With AI assistant" })}</CardTitle>
                             <CardDescription>
-                                Beschreibe deine Idee und lass die KI Charaktere, Handlung und Welt automatisch entwickeln.
+                                {t({
+                                    de: "Beschreibe deine Idee und lass die KI Charaktere, Handlung und Welt automatisch entwickeln.",
+                                    en: "Describe your idea and let the AI develop characters, plot, and world automatically.",
+                                })}
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
                             {loadingSettings ? (
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                     <Loader2 className="h-4 w-4 animate-spin" />
-                                    Lade Einstellungen...
+                                    {t({ de: "Lade Einstellungen...", en: "Loading settings..." })}
                                 </div>
                             ) : aiSettings ? (
                                 <div className="space-y-2">
                                     <div className="text-sm text-green-600 dark:text-green-400">
-                                        ✓ KI bereit ({aiSettings.model})
+                                        {t({ de: "? KI bereit ({{model}})", en: "? AI ready ({{model}})" }, { model: aiSettings.model })}
                                     </div>
                                     <Button className="w-full" onClick={() => setMode("wizard")}>
                                         <Sparkles className="mr-2 h-4 w-4" />
-                                        Wizard starten
+                                        {t({ de: "Wizard starten", en: "Start wizard" })}
                                     </Button>
                                 </div>
                             ) : (
                                 <div className="space-y-2">
                                     <div className="text-sm text-yellow-600 dark:text-yellow-400">
-                                        ⚠ Keine API-Konfiguration gefunden.
+                                        {t({ de: "Keine API-Konfiguration gefunden.", en: "No API configuration found." })}
                                     </div>
                                     <Link href={"/settings" as Route}>
                                         <Button variant="outline" className="w-full">
-                                            Einstellungen konfigurieren
+                                            {t({ de: "Einstellungen konfigurieren", en: "Configure settings" })}
                                         </Button>
                                     </Link>
                                 </div>
@@ -228,15 +236,18 @@ export default function NewBookPage() {
                             <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center mb-4">
                                 <PenTool className="h-6 w-6 text-white" />
                             </div>
-                            <CardTitle>Manuell erstellen</CardTitle>
+                            <CardTitle>{t({ de: "Manuell erstellen", en: "Create manually" })}</CardTitle>
                             <CardDescription>
-                                Erstelle dein Buch klassisch mit einem leeren Projekt und füge alles selbst hinzu.
+                                {t({
+                                    de: "Erstelle dein Buch klassisch mit einem leeren Projekt und füge alles selbst hinzu.",
+                                    en: "Create your book the classic way with an empty project and add everything yourself.",
+                                })}
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
                             <Button variant="outline" className="w-full" onClick={() => setMode("manual")}>
                                 <PenTool className="mr-2 h-4 w-4" />
-                                Manuell starten
+                                {t({ de: "Manuell starten", en: "Start manual" })}
                             </Button>
                         </CardContent>
                     </Card>
@@ -250,15 +261,18 @@ export default function NewBookPage() {
                             <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center mb-4">
                                 <Upload className="h-6 w-6 text-white" />
                             </div>
-                            <CardTitle>Werk importieren</CardTitle>
+                            <CardTitle>{t({ de: "Werk importieren", en: "Import work" })}</CardTitle>
                             <CardDescription>
-                                Importiere ein bestehendes Werk aus DOCX, TXT oder Markdown mit automatischer Kapitelaufteilung.
+                                {t({
+                                    de: "Importiere ein bestehendes Werk aus DOCX, TXT oder Markdown mit automatischer Kapitelaufteilung.",
+                                    en: "Import an existing work from DOCX, TXT, or Markdown with automatic chapter splitting.",
+                                })}
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
                             <Button variant="outline" className="w-full" onClick={() => setMode("import")}>
                                 <Upload className="mr-2 h-4 w-4" />
-                                Datei importieren
+                                {t({ de: "Datei importieren", en: "Import file" })}
                             </Button>
                         </CardContent>
                     </Card>
@@ -276,15 +290,15 @@ export default function NewBookPage() {
                     className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 transition-colors"
                 >
                     <ArrowLeft className="h-4 w-4" />
-                    Zurück zur Auswahl
+                    {t({ de: "Zurück zur Auswahl", en: "Back to selection" })}
                 </button>
 
                 <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">
                     <Sparkles className="h-8 w-8 text-purple-500" />
-                    KI Story-Wizard
+                    {t({ de: "KI Story-Wizard", en: "AI story wizard" })}
                 </h1>
                 <p className="text-muted-foreground mb-8">
-                    Lass die KI dir helfen, deine Geschichte zu entwickeln.
+                    {t({ de: "Lass die KI dir helfen, deine Geschichte zu entwickeln.", en: "Let AI help you develop your story." })}
                 </p>
 
                 <StoryWizard
@@ -311,7 +325,7 @@ export default function NewBookPage() {
                     className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 transition-colors"
                 >
                     <ArrowLeft className="h-4 w-4" />
-                    Zurück zur Auswahl
+                    {t({ de: "Zurück zur Auswahl", en: "Back to selection" })}
                 </button>
 
                 <Card>
@@ -321,9 +335,12 @@ export default function NewBookPage() {
                                 <Upload className="h-6 w-6 text-white" />
                             </div>
                             <div>
-                                <CardTitle className="text-2xl">Werk importieren</CardTitle>
+                                <CardTitle className="text-2xl">{t({ de: "Werk importieren", en: "Import work" })}</CardTitle>
                                 <CardDescription>
-                                    Lade dein bestehendes Werk hoch und wir teilen es automatisch in Kapitel auf.
+                                    {t({
+                                        de: "Lade dein bestehendes Werk hoch und wir teilen es automatisch in Kapitel auf.",
+                                        en: "Upload your existing work and we'll automatically split it into chapters.",
+                                    })}
                                 </CardDescription>
                             </div>
                         </div>
@@ -333,7 +350,7 @@ export default function NewBookPage() {
                         {importResult?.success && (
                             <div className="flex flex-col items-center py-8 text-center">
                                 <CheckCircle2 className="h-16 w-16 text-green-500 mb-4" />
-                                <h3 className="text-xl font-semibold mb-2">Import erfolgreich!</h3>
+                                <h3 className="text-xl font-semibold mb-2">{t({ de: "Import erfolgreich!", en: "Import successful!" })}</h3>
                                 <p className="text-muted-foreground mb-6">
                                     {importResult.message}
                                 </p>
@@ -341,7 +358,7 @@ export default function NewBookPage() {
                                     onClick={() => router.push(`/books/${importResult.bookId}` as Route)}
                                     size="lg"
                                 >
-                                    Zum Buch
+                                    {t({ de: "Zum Buch", en: "Go to book" })}
                                 </Button>
                             </div>
                         )}
@@ -359,7 +376,7 @@ export default function NewBookPage() {
                             <>
                                 {/* File Upload */}
                                 <div className="space-y-2">
-                                    <Label>Datei auswählen</Label>
+                                    <Label>{t({ de: "Datei auswählen", en: "Select file" })}</Label>
                                     <input
                                         ref={fileInputRef}
                                         type="file"
@@ -382,7 +399,7 @@ export default function NewBookPage() {
                                                 size="sm"
                                                 onClick={() => fileInputRef.current?.click()}
                                             >
-                                                Ändern
+                                                {t({ de: "Ändern", en: "Change" })}
                                             </Button>
                                         </div>
                                     ) : (
@@ -391,9 +408,9 @@ export default function NewBookPage() {
                                             className="flex flex-col items-center justify-center p-8 rounded-lg border-2 border-dashed cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors"
                                         >
                                             <Upload className="h-10 w-10 text-muted-foreground mb-3" />
-                                            <p className="font-medium">Datei hier ablegen oder klicken</p>
+                                            <p className="font-medium">{t({ de: "Datei hier ablegen oder klicken", en: "Drop file here or click" })}</p>
                                             <p className="text-sm text-muted-foreground mt-1">
-                                                DOCX, TXT oder Markdown
+                                                {t({ de: "DOCX, TXT oder Markdown", en: "DOCX, TXT, or Markdown" })}
                                             </p>
                                         </div>
                                     )}
@@ -401,25 +418,28 @@ export default function NewBookPage() {
 
                                 {/* Title */}
                                 <div className="space-y-2">
-                                    <Label htmlFor="import-title">Buchtitel</Label>
+                                    <Label htmlFor="import-title">{t({ de: "Buchtitel", en: "Book title" })}</Label>
                                     <Input
                                         id="import-title"
-                                        placeholder="Titel des importierten Buches"
+                                        placeholder={t({ de: "Titel des importierten Buches", en: "Title of imported book" })}
                                         value={importTitle}
                                         onChange={(e) => setImportTitle(e.target.value)}
                                     />
                                     <p className="text-xs text-muted-foreground">
-                                        Wird aus dem Dateinamen übernommen, kann aber angepasst werden.
+                                        {t({
+                                            de: "Wird aus dem Dateinamen übernommen, kann aber angepasst werden.",
+                                            en: "Taken from the filename, but can be adjusted.",
+                                        })}
                                     </p>
                                 </div>
 
                                 {/* Info Box */}
                                 <div className="p-4 rounded-lg bg-muted/50 text-sm space-y-2">
-                                    <p className="font-medium">Automatische Kapitelaufteilung:</p>
+                                    <p className="font-medium">{t({ de: "Automatische Kapitelaufteilung:", en: "Automatic chapter splitting:" })}</p>
                                     <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                                        <li>Kapitel werden anhand von Überschriften erkannt</li>
-                                        <li>Auch "Kapitel X" / "Chapter X" werden erkannt</li>
-                                        <li>Formatierung (Fett, Kursiv) wird beibehalten</li>
+                                        <li>{t({ de: "Kapitel werden anhand von Überschriften erkannt", en: "Chapters are detected by headings" })}</li>
+                                        <li>{t({ de: "Auch \"Kapitel X\" / \"Chapter X\" werden erkannt", en: "Also recognizes \"Kapitel X\" / \"Chapter X\"" })}</li>
+                                        <li>{t({ de: "Formatierung (Fett, Kursiv) wird beibehalten", en: "Formatting (bold, italic) is preserved" })}</li>
                                     </ul>
                                 </div>
 
@@ -433,14 +453,14 @@ export default function NewBookPage() {
                                             setImportTitle("");
                                         }}
                                     >
-                                        Abbrechen
+                                        {t({ de: "Abbrechen", en: "Cancel" })}
                                     </Button>
                                     <Button
                                         onClick={handleImport}
                                         disabled={!selectedFile || isImporting}
                                     >
                                         {isImporting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                        Importieren
+                                        {t({ de: "Importieren", en: "Import" })}
                                     </Button>
                                 </div>
                             </>
@@ -459,23 +479,26 @@ export default function NewBookPage() {
                 className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 transition-colors"
             >
                 <ArrowLeft className="h-4 w-4" />
-                Zurück zur Auswahl
+                {t({ de: "Zurück zur Auswahl", en: "Back to selection" })}
             </button>
 
             <Card>
                 <CardHeader>
-                    <CardTitle className="text-2xl">Neues Buch erstellen</CardTitle>
+                    <CardTitle className="text-2xl">{t({ de: "Neues Buch erstellen", en: "Create a new book" })}</CardTitle>
                     <CardDescription>
-                        Gib deinem Buchprojekt einen Namen und optional weitere Details.
+                        {t({
+                            de: "Gib deinem Buchprojekt einen Namen und optional weitere Details.",
+                            en: "Give your book project a name and optional details.",
+                        })}
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div className="space-y-2">
-                            <Label htmlFor="title">Titel *</Label>
+                            <Label htmlFor="title">{t({ de: "Titel *", en: "Title *" })}</Label>
                             <Input
                                 id="title"
-                                placeholder="Der Titel deines Buches"
+                                placeholder={t({ de: "Der Titel deines Buches", en: "Your book's title" })}
                                 value={formData.title}
                                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                                 required
@@ -483,10 +506,10 @@ export default function NewBookPage() {
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="description">Beschreibung</Label>
+                            <Label htmlFor="description">{t({ de: "Beschreibung", en: "Description" })}</Label>
                             <textarea
                                 id="description"
-                                placeholder="Worum geht es in deinem Buch?"
+                                placeholder={t({ de: "Worum geht es in deinem Buch?", en: "What is your book about?" })}
                                 value={formData.description}
                                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                                 className="w-full min-h-24 px-3 py-2 rounded-md border border-input bg-background text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
@@ -495,20 +518,20 @@ export default function NewBookPage() {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <Label htmlFor="genre">Genre</Label>
+                                <Label htmlFor="genre">{t({ de: "Genre", en: "Genre" })}</Label>
                                 <Input
                                     id="genre"
-                                    placeholder="z.B. Fantasy, Krimi, Roman"
+                                    placeholder={t({ de: "z.B. Fantasy, Krimi, Roman", en: "e.g. Fantasy, Mystery, Novel" })}
                                     value={formData.genre}
                                     onChange={(e) => setFormData({ ...formData, genre: e.target.value })}
                                 />
                             </div>
 
                             <div className="space-y-2">
-                                <Label htmlFor="targetAudience">Zielgruppe</Label>
+                                <Label htmlFor="targetAudience">{t({ de: "Zielgruppe", en: "Target audience" })}</Label>
                                 <Input
                                     id="targetAudience"
-                                    placeholder="z.B. Jugendliche, Erwachsene"
+                                    placeholder={t({ de: "z.B. Jugendliche, Erwachsene", en: "e.g. Teens, adults" })}
                                     value={formData.targetAudience}
                                     onChange={(e) => setFormData({ ...formData, targetAudience: e.target.value })}
                                 />
@@ -516,10 +539,10 @@ export default function NewBookPage() {
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="writingStyle">Schreibstil</Label>
+                            <Label htmlFor="writingStyle">{t({ de: "Schreibstil", en: "Writing style" })}</Label>
                             <Input
                                 id="writingStyle"
-                                placeholder="z.B. Humorvoll, Spannend, Poetisch"
+                                placeholder={t({ de: "z.B. Humorvoll, Spannend, Poetisch", en: "e.g. Humorous, Suspenseful, Poetic" })}
                                 value={formData.writingStyle}
                                 onChange={(e) => setFormData({ ...formData, writingStyle: e.target.value })}
                             />
@@ -527,11 +550,11 @@ export default function NewBookPage() {
 
                         <div className="flex justify-end gap-4 pt-4">
                             <Button type="button" variant="outline" onClick={() => setMode("select")}>
-                                Abbrechen
+                                {t({ de: "Abbrechen", en: "Cancel" })}
                             </Button>
                             <Button type="submit" disabled={isLoading || !formData.title.trim()}>
                                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Buch erstellen
+                                {t({ de: "Buch erstellen", en: "Create book" })}
                             </Button>
                         </div>
                     </form>
@@ -540,4 +563,3 @@ export default function NewBookPage() {
         </div>
     );
 }
-

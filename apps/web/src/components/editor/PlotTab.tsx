@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
     Map,
     Anchor,
@@ -28,6 +28,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/locale-provider";
 
 import PlotAIPanel from "./PlotAIPanel";
 
@@ -49,17 +50,6 @@ type PlotTabProps = {
     onSave: (plotPoint: PlotPoint) => void;
 };
 
-const PLOT_TYPES = [
-    { value: "all", label: "Alle", icon: Map },
-    { value: "hook", label: "Hook", icon: Anchor },
-    { value: "rising_action", label: "Steigend", icon: ArrowUpCircle },
-    { value: "climax", label: "Höhepunkt", icon: Star },
-    { value: "falling_action", label: "Fallend", icon: ArrowDownCircle },
-    { value: "resolution", label: "Auflösung", icon: CheckCircle2 },
-    { value: "subplot", label: "Nebenplot", icon: GitBranch },
-    { value: "event", label: "Ereignis", icon: Calendar },
-];
-
 export default function PlotTab({
     bookId,
     plotPoints,
@@ -68,8 +58,20 @@ export default function PlotTab({
     onCreate,
     onSave
 }: PlotTabProps) {
+    const { t } = useI18n();
     const [searchQuery, setSearchQuery] = useState("");
     const [activeFilter, setActiveFilter] = useState("all");
+
+    const plotTypes = useMemo(() => ([
+        { value: "all", label: t({ de: "Alle", en: "All" }), icon: Map },
+        { value: "hook", label: t({ de: "Hook", en: "Hook" }), icon: Anchor },
+        { value: "rising_action", label: t({ de: "Steigend", en: "Rising" }), icon: ArrowUpCircle },
+        { value: "climax", label: t({ de: "Höhepunkt", en: "Climax" }), icon: Star },
+        { value: "falling_action", label: t({ de: "Fallend", en: "Falling" }), icon: ArrowDownCircle },
+        { value: "resolution", label: t({ de: "Auflösung", en: "Resolution" }), icon: CheckCircle2 },
+        { value: "subplot", label: t({ de: "Nebenplot", en: "Subplot" }), icon: GitBranch },
+        { value: "event", label: t({ de: "Ereignis", en: "Event" }), icon: Calendar },
+    ]), [t]);
 
     const filteredPoints = plotPoints.filter(point => {
         const matchesSearch = point.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -79,12 +81,12 @@ export default function PlotTab({
     });
 
     const getTypeIcon = (type: string) => {
-        const found = PLOT_TYPES.find(t => t.value === type);
+        const found = plotTypes.find((plotType) => plotType.value === type);
         return found ? found.icon : Map;
     };
 
     const getTypeLabel = (type: string) => {
-        const found = PLOT_TYPES.find(t => t.value === type);
+        const found = plotTypes.find((plotType) => plotType.value === type);
         return found ? found.label : type;
     };
 
@@ -95,22 +97,22 @@ export default function PlotTab({
                 <Card className="md:col-span-3 bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-background border-amber-500/20 shadow-sm relative overflow-hidden">
                     <div className="absolute inset-0 bg-grid-white/10 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))]" />
                     <CardHeader className="relative z-10 pb-2">
-                        <CardTitle className="text-xl font-serif">Handlungsübersicht</CardTitle>
-                        <CardDescription>Strukturiere deine Geschichte und verwalte wichtige Wendepunkte.</CardDescription>
+                        <CardTitle className="text-xl font-serif">{t({ de: "Handlungsübersicht", en: "Plot overview" })}</CardTitle>
+                        <CardDescription>{t({ de: "Strukturiere deine Geschichte und verwalte wichtige Wendepunkte.", en: "Structure your story and manage key turning points." })}</CardDescription>
                     </CardHeader>
                     <CardContent className="relative z-10 pt-0">
                         <div className="flex gap-4 mt-2">
                             <div className="flex items-center gap-2 text-sm text-muted-foreground bg-background/50 backdrop-blur px-3 py-1.5 rounded-full border border-border/50">
                                 <Star className="h-4 w-4 text-amber-500" />
-                                <span className="font-medium text-foreground">{plotPoints.filter(p => p.type === "climax").length}</span> Höhepunkte
+                                <span className="font-medium text-foreground">{plotPoints.filter(p => p.type === "climax").length}</span> {t({ de: "Höhepunkte", en: "Climaxes" })}
                             </div>
                             <div className="flex items-center gap-2 text-sm text-muted-foreground bg-background/50 backdrop-blur px-3 py-1.5 rounded-full border border-border/50">
                                 <GitBranch className="h-4 w-4 text-blue-500" />
-                                <span className="font-medium text-foreground">{plotPoints.filter(p => p.type === "subplot").length}</span> Nebenplots
+                                <span className="font-medium text-foreground">{plotPoints.filter(p => p.type === "subplot").length}</span> {t({ de: "Nebenplots", en: "Subplots" })}
                             </div>
                             <div className="flex items-center gap-2 text-sm text-muted-foreground bg-background/50 backdrop-blur px-3 py-1.5 rounded-full border border-border/50">
                                 <Calendar className="h-4 w-4 text-emerald-500" />
-                                <span className="font-medium text-foreground">{plotPoints.length}</span> Ereignisse
+                                <span className="font-medium text-foreground">{plotPoints.length}</span> {t({ de: "Ereignisse", en: "Events" })}
                             </div>
                         </div>
                     </CardContent>
@@ -120,7 +122,7 @@ export default function PlotTab({
                     <div className="rounded-full bg-primary/10 p-3 mb-3 group-hover:scale-110 transition-transform duration-300">
                         <Plus className="h-6 w-6 text-primary" />
                     </div>
-                    <span className="font-medium text-sm">Neuer Punkt</span>
+                    <span className="font-medium text-sm">{t({ de: "Neuer Punkt", en: "New point" })}</span>
                 </Card>
             </div>
 
@@ -130,13 +132,13 @@ export default function PlotTab({
             {/* Controls */}
             <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between sticky top-0 z-20 bg-background/95 backdrop-blur py-2">
                 <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0 w-full md:w-auto no-scrollbar">
-                    {PLOT_TYPES.map(type => {
-                        const Icon = type.icon;
-                        const isActive = activeFilter === type.value;
+                    {plotTypes.map((plotType) => {
+                        const Icon = plotType.icon;
+                        const isActive = activeFilter === plotType.value;
                         return (
                             <button
-                                key={type.value}
-                                onClick={() => setActiveFilter(type.value)}
+                                key={plotType.value}
+                                onClick={() => setActiveFilter(plotType.value)}
                                 className={cn(
                                     "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap",
                                     isActive
@@ -145,7 +147,7 @@ export default function PlotTab({
                                 )}
                             >
                                 <Icon className="h-3.5 w-3.5" />
-                                {type.label}
+                                {plotType.label}
                             </button>
                         );
                     })}
@@ -154,7 +156,7 @@ export default function PlotTab({
                 <div className="relative w-full md:w-64">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
-                        placeholder="Suche..."
+                        placeholder={t({ de: "Suche...", en: "Search..." })}
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="pl-9 h-9 bg-secondary/30 border-transparent focus:border-primary focus:bg-background transition-all"
@@ -174,14 +176,17 @@ export default function PlotTab({
                         <div className="bg-secondary/50 p-6 rounded-full mb-4">
                             <Map className="h-10 w-10 text-muted-foreground/50" />
                         </div>
-                        <h3 className="text-lg font-medium">Keine Punkte gefunden</h3>
+                        <h3 className="text-lg font-medium">{t({ de: "Keine Punkte gefunden", en: "No points found" })}</h3>
                         <p className="text-muted-foreground text-sm max-w-xs mt-2 mb-6">
-                            Es gibt keine Handlungspunkte, die deiner Suche oder dem Filter entsprechen.
+                            {t({
+                                de: "Es gibt keine Handlungspunkte, die deiner Suche oder dem Filter entsprechen.",
+                                en: "There are no plot points matching your search or filter.",
+                            })}
                         </p>
                         {activeFilter !== "all" || searchQuery ? (
-                            <Button variant="outline" onClick={() => { setActiveFilter("all"); setSearchQuery(""); }}>Filter zurücksetzen</Button>
+                            <Button variant="outline" onClick={() => { setActiveFilter("all"); setSearchQuery(""); }}>{t({ de: "Filter zurücksetzen", en: "Reset filters" })}</Button>
                         ) : (
-                            <Button onClick={onCreate}>Ersten Handlungspunkt erstellen</Button>
+                            <Button onClick={onCreate}>{t({ de: "Ersten Handlungspunkt erstellen", en: "Create the first plot point" })}</Button>
                         )}
                     </motion.div>
                 ) : (
@@ -227,13 +232,13 @@ export default function PlotTab({
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="end">
                                                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(point); }}>
-                                                            <Edit2 className="mr-2 h-4 w-4" /> Bearbeiten
+                                                            <Edit2 className="mr-2 h-4 w-4" /> {t({ de: "Bearbeiten", en: "Edit" })}
                                                         </DropdownMenuItem>
                                                         <DropdownMenuItem
                                                             className="text-destructive focus:text-destructive"
                                                             onClick={(e) => { e.stopPropagation(); onDelete(point.id); }}
                                                         >
-                                                            <Trash2 className="mr-2 h-4 w-4" /> Löschen
+                                                            <Trash2 className="mr-2 h-4 w-4" /> {t({ de: "Löschen", en: "Delete" })}
                                                         </DropdownMenuItem>
                                                     </DropdownMenuContent>
                                                 </DropdownMenu>
@@ -241,7 +246,7 @@ export default function PlotTab({
 
                                             <h3 className="text-lg font-bold font-serif mb-2 group-hover:text-primary transition-colors">{point.title}</h3>
                                             <p className="text-sm text-muted-foreground line-clamp-4 leading-relaxed">
-                                                {point.description || <span className="italic opacity-50">Keine Beschreibung...</span>}
+                                                {point.description || <span className="italic opacity-50">{t({ de: "Keine Beschreibung...", en: "No description..." })}</span>}
                                             </p>
                                         </div>
                                     </div>

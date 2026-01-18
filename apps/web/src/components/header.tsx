@@ -2,17 +2,21 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ModeToggle } from "./mode-toggle";
-import { Home, Settings, BookOpen } from "lucide-react";
+import { BookOpen, Settings } from "lucide-react";
 import { motion } from "framer-motion";
+
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/locale-provider";
+import LanguageToggle from "@/components/language-toggle";
+import { ModeToggle } from "./mode-toggle";
 
 export default function Header() {
   const pathname = usePathname();
+  const { t } = useI18n();
 
   const links = [
-    { to: "/books", label: "Meine Bücher", icon: BookOpen },
-    { to: "/settings", label: "Einstellungen", icon: Settings },
+    { to: "/books", label: t({ de: "Meine Bücher", en: "My books" }), icon: BookOpen },
+    { to: "/settings", label: t({ de: "Einstellungen", en: "Settings" }), icon: Settings },
   ] as const;
 
   return (
@@ -69,6 +73,7 @@ export default function Header() {
 
         {/* Actions */}
         <div className="flex items-center gap-2 pl-4 border-l border-zinc-200 dark:border-zinc-800">
+          <LanguageToggle />
           <ModeToggle />
         </div>
       </div>

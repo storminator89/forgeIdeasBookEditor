@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { Loader2, Save, X, Upload, Image as ImageIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useI18n } from "@/components/locale-provider";
 
 type Character = {
     id: string;
@@ -30,21 +31,22 @@ interface CharacterFormProps {
     onCancel?: () => void;
 }
 
-const ROLES = [
-    { value: "protagonist", label: "Protagonist" },
-    { value: "antagonist", label: "Antagonist" },
-    { value: "supporting", label: "Nebenrolle" },
-    { value: "minor", label: "Kleine Rolle" },
-];
-
 export default function CharacterForm({
     bookId,
     character,
     onSave,
     onCancel,
 }: CharacterFormProps) {
+    const { t } = useI18n();
     const isEditing = !!character;
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const roles = useMemo(() => ([
+        { value: "protagonist", label: t({ de: "Protagonist", en: "Protagonist" }) },
+        { value: "antagonist", label: t({ de: "Antagonist", en: "Antagonist" }) },
+        { value: "supporting", label: t({ de: "Nebenrolle", en: "Supporting" }) },
+        { value: "minor", label: t({ de: "Kleine Rolle", en: "Minor" }) },
+    ]), [t]);
 
     const [name, setName] = useState(character?.name || "");
     const [role, setRole] = useState(character?.role || "supporting");
@@ -77,13 +79,13 @@ export default function CharacterForm({
             });
 
             if (!response.ok) {
-                throw new Error("Upload fehlgeschlagen");
+                throw new Error(t({ de: "Upload fehlgeschlagen", en: "Upload failed" }));
             }
 
             const data = await response.json();
             setImageUrl(data.url);
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Upload-Fehler");
+            setError(err instanceof Error ? err.message : t({ de: "Upload-Fehler", en: "Upload error" }));
         } finally {
             setIsUploading(false);
         }
@@ -91,7 +93,7 @@ export default function CharacterForm({
 
     const handleSave = async () => {
         if (!name.trim()) {
-            setError("Name ist erforderlich");
+            setError(t({ de: "Name ist erforderlich", en: "Name is required" }));
             return;
         }
 
@@ -123,13 +125,13 @@ export default function CharacterForm({
             });
 
             if (!response.ok) {
-                throw new Error("Fehler beim Speichern");
+                throw new Error(t({ de: "Fehler beim Speichern", en: "Failed to save" }));
             }
 
             const savedCharacter = await response.json();
             onSave?.(savedCharacter);
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Unbekannter Fehler");
+            setError(err instanceof Error ? err.message : t({ de: "Unbekannter Fehler", en: "Unknown error" }));
         } finally {
             setIsSaving(false);
         }
@@ -142,12 +144,12 @@ export default function CharacterForm({
                     <div className="flex items-center justify-between">
                         <div>
                             <CardTitle>
-                                {isEditing ? "Charakter bearbeiten" : "Neuer Charakter"}
+                                {isEditing ? t({ de: "Charakter bearbeiten", en: "Edit character" }) : t({ de: "Neuer Charakter", en: "New character" })}
                             </CardTitle>
                             <CardDescription>
                                 {isEditing
-                                    ? "Bearbeite die Details dieses Charakters."
-                                    : "Erstelle einen neuen Charakter für dein Buch."}
+                                    ? t({ de: "Bearbeite die Details dieses Charakters.", en: "Edit this character's details." })
+                                    : t({ de: "Erstelle einen neuen Charakter für dein Buch.", en: "Create a new character for your book." })}
                             </CardDescription>
                         </div>
                         <Button variant="ghost" size="sm" onClick={onCancel}>
@@ -166,7 +168,7 @@ export default function CharacterForm({
                             {imageUrl ? (
                                 <img
                                     src={imageUrl}
-                                    alt={name || "Character"}
+                                    alt={name || t({ de: "Charakter", en: "Character" })}
                                     className="h-full w-full object-cover"
                                 />
                             ) : isUploading ? (
@@ -174,7 +176,7 @@ export default function CharacterForm({
                             ) : (
                                 <div className="text-center">
                                     <ImageIcon className="h-8 w-8 text-white mx-auto" />
-                                    <span className="text-xs text-white/80">Foto</span>
+                                    <span className="text-xs text-white/80">{t({ de: "Foto", en: "Photo" })}</span>
                                 </div>
                             )}
                             <input
@@ -189,21 +191,21 @@ export default function CharacterForm({
                         {/* Name & Role */}
                         <div className="flex-1 grid grid-cols-2 gap-4">
                             <div className="space-y-2 col-span-2 sm:col-span-1">
-                                <label className="text-sm font-medium">Name *</label>
+                                <label className="text-sm font-medium">{t({ de: "Name *", en: "Name *" })}</label>
                                 <Input
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
-                                    placeholder="z.B. Anna Schmidt"
+                                    placeholder={t({ de: "z.B. Anna Schmidt", en: "e.g. Anna Schmidt" })}
                                 />
                             </div>
                             <div className="space-y-2 col-span-2 sm:col-span-1">
-                                <label className="text-sm font-medium">Rolle</label>
+                                <label className="text-sm font-medium">{t({ de: "Rolle", en: "Role" })}</label>
                                 <select
                                     value={role}
                                     onChange={(e) => setRole(e.target.value)}
                                     className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
                                 >
-                                    {ROLES.map((r) => (
+                                    {roles.map((r) => (
                                         <option key={r.value} value={r.value}>
                                             {r.label}
                                         </option>
@@ -220,83 +222,92 @@ export default function CharacterForm({
                             className="text-destructive"
                             onClick={() => setImageUrl("")}
                         >
-                            Bild entfernen
+                            {t({ de: "Bild entfernen", en: "Remove image" })}
                         </Button>
                     )}
 
                     {/* Description */}
                     <div className="space-y-2">
-                        <label className="text-sm font-medium">Kurzbeschreibung</label>
+                        <label className="text-sm font-medium">{t({ de: "Kurzbeschreibung", en: "Short description" })}</label>
                         <textarea
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
-                            placeholder="Wer ist dieser Charakter? Was ist seine/ihre Bedeutung in der Geschichte?"
+                            placeholder={t({
+                                de: "Wer ist dieser Charakter? Was ist seine/ihre Bedeutung in der Geschichte?",
+                                en: "Who is this character? What is their role in the story?",
+                            })}
                             className="w-full min-h-[80px] px-3 py-2 rounded-md border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
                         />
                     </div>
 
                     {/* Personality */}
                     <div className="space-y-2">
-                        <label className="text-sm font-medium">Persönlichkeit</label>
+                        <label className="text-sm font-medium">{t({ de: "Persönlichkeit", en: "Personality" })}</label>
                         <textarea
                             value={personality}
                             onChange={(e) => setPersonality(e.target.value)}
-                            placeholder="Charakterzüge, Stärken, Schwächen, Gewohnheiten..."
+                            placeholder={t({
+                                de: "Charakterzüge, Stärken, Schwächen, Gewohnheiten...",
+                                en: "Traits, strengths, weaknesses, habits...",
+                            })}
                             className="w-full min-h-[80px] px-3 py-2 rounded-md border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
                         />
                     </div>
 
                     {/* Appearance */}
                     <div className="space-y-2">
-                        <label className="text-sm font-medium">Aussehen</label>
+                        <label className="text-sm font-medium">{t({ de: "Aussehen", en: "Appearance" })}</label>
                         <textarea
                             value={appearance}
                             onChange={(e) => setAppearance(e.target.value)}
-                            placeholder="Physische Beschreibung, Kleidungsstil..."
+                            placeholder={t({ de: "Physische Beschreibung, Kleidungsstil...", en: "Physical description, style..." })}
                             className="w-full min-h-[80px] px-3 py-2 rounded-md border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
                         />
                     </div>
 
                     {/* Backstory */}
                     <div className="space-y-2">
-                        <label className="text-sm font-medium">Hintergrundgeschichte</label>
+                        <label className="text-sm font-medium">{t({ de: "Hintergrundgeschichte", en: "Backstory" })}</label>
                         <textarea
                             value={backstory}
                             onChange={(e) => setBackstory(e.target.value)}
-                            placeholder="Vergangenheit, wichtige Ereignisse, Beziehungen..."
+                            placeholder={t({ de: "Vergangenheit, wichtige Ereignisse, Beziehungen...", en: "Past, key events, relationships..." })}
                             className="w-full min-h-[100px] px-3 py-2 rounded-md border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
                         />
                     </div>
 
                     {/* Motivation */}
                     <div className="space-y-2">
-                        <label className="text-sm font-medium">Motivation & Ziele</label>
+                        <label className="text-sm font-medium">{t({ de: "Motivation & Ziele", en: "Motivation & goals" })}</label>
                         <textarea
                             value={motivation}
                             onChange={(e) => setMotivation(e.target.value)}
-                            placeholder="Was will dieser Charakter erreichen? Was treibt ihn/sie an?"
+                            placeholder={t({
+                                de: "Was will dieser Charakter erreichen? Was treibt ihn/sie an?",
+                                en: "What does this character want to achieve? What drives them?",
+                            })}
                             className="w-full min-h-[80px] px-3 py-2 rounded-md border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
                         />
                     </div>
 
                     {/* Character Arc */}
                     <div className="space-y-2">
-                        <label className="text-sm font-medium">Charakterentwicklung</label>
+                        <label className="text-sm font-medium">{t({ de: "Charakterentwicklung", en: "Character arc" })}</label>
                         <textarea
                             value={arc}
                             onChange={(e) => setArc(e.target.value)}
-                            placeholder="Wie entwickelt sich der Charakter im Laufe der Geschichte?"
+                            placeholder={t({ de: "Wie entwickelt sich der Charakter im Laufe der Geschichte?", en: "How does the character evolve over the story?" })}
                             className="w-full min-h-[80px] px-3 py-2 rounded-md border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
                         />
                     </div>
 
                     {/* Notes */}
                     <div className="space-y-2">
-                        <label className="text-sm font-medium">Notizen</label>
+                        <label className="text-sm font-medium">{t({ de: "Notizen", en: "Notes" })}</label>
                         <textarea
                             value={notes}
                             onChange={(e) => setNotes(e.target.value)}
-                            placeholder="Private Notizen zu diesem Charakter..."
+                            placeholder={t({ de: "Private Notizen zu diesem Charakter...", en: "Private notes about this character..." })}
                             className="w-full min-h-[80px] px-3 py-2 rounded-md border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
                         />
                     </div>
@@ -311,7 +322,7 @@ export default function CharacterForm({
                     {/* Actions */}
                     <div className="flex justify-end gap-2 pt-4">
                         <Button variant="outline" onClick={onCancel}>
-                            Abbrechen
+                            {t({ de: "Abbrechen", en: "Cancel" })}
                         </Button>
                         <Button onClick={handleSave} disabled={isSaving}>
                             {isSaving ? (
@@ -319,7 +330,7 @@ export default function CharacterForm({
                             ) : (
                                 <Save className="mr-2 h-4 w-4" />
                             )}
-                            {isEditing ? "Speichern" : "Erstellen"}
+                            {isEditing ? t({ de: "Speichern", en: "Save" }) : t({ de: "Erstellen", en: "Create" })}
                         </Button>
                     </div>
                 </CardContent>

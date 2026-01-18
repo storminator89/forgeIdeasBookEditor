@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Loader2, Sparkles, Plus, Check, X, Map } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useI18n } from "@/components/locale-provider";
 
 type PlotPoint = {
     id: string;
@@ -25,29 +26,30 @@ interface PlotAIPanelProps {
     onPlotPointCreated: (plotPoint: PlotPoint) => void;
 }
 
-const PLOT_TYPES = [
-    { value: "hook", label: "Hook" },
-    { value: "rising_action", label: "Steigende Handlung" },
-    { value: "climax", label: "Höhepunkt" },
-    { value: "falling_action", label: "Fallende Handlung" },
-    { value: "resolution", label: "Auflösung" },
-    { value: "subplot", label: "Nebenplot" },
-    { value: "event", label: "Ereignis" },
-];
-
 export default function PlotAIPanel({
     bookId,
     onPlotPointCreated,
 }: PlotAIPanelProps) {
+    const { t } = useI18n();
     const [prompt, setPrompt] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [preview, setPreview] = useState<GeneratedPlotPoint | null>(null);
     const [isSaving, setIsSaving] = useState(false);
 
+    const plotTypes = useMemo(() => ([
+        { value: "hook", label: t({ de: "Hook", en: "Hook" }) },
+        { value: "rising_action", label: t({ de: "Steigende Handlung", en: "Rising action" }) },
+        { value: "climax", label: t({ de: "Höhepunkt", en: "Climax" }) },
+        { value: "falling_action", label: t({ de: "Fallende Handlung", en: "Falling action" }) },
+        { value: "resolution", label: t({ de: "Auflösung", en: "Resolution" }) },
+        { value: "subplot", label: t({ de: "Nebenplot", en: "Subplot" }) },
+        { value: "event", label: t({ de: "Ereignis", en: "Event" }) },
+    ]), [t]);
+
     const handleGenerate = async () => {
         if (!prompt.trim()) {
-            setError("Bitte gib eine Beschreibung ein");
+            setError(t({ de: "Bitte gib eine Beschreibung ein", en: "Please enter a description" }));
             return;
         }
 
@@ -67,13 +69,13 @@ export default function PlotAIPanel({
 
             if (!response.ok) {
                 const data = await response.json();
-                throw new Error(data.error || "Fehler bei der Generierung");
+                throw new Error(data.error || t({ de: "Fehler bei der Generierung", en: "Generation failed" }));
             }
 
             const data = await response.json();
             setPreview(data.plotPoint);
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Unbekannter Fehler");
+            setError(err instanceof Error ? err.message : t({ de: "Unbekannter Fehler", en: "Unknown error" }));
         } finally {
             setIsLoading(false);
         }
@@ -86,12 +88,6 @@ export default function PlotAIPanel({
         setError(null);
 
         try {
-            // We create the plot point via the regular API, but using the AI generated data
-            // We need to fetch orderIndex? Usually backend handles it or we default to last.
-            // Let's assume the POST /api/books/[bookId]/plot endpoint handles creation.
-            // Wait, I need to check how standard creation works.
-            // Standard creation usually takes { title, type, description, orderIndex? }
-
             const response = await fetch(`/api/books/${bookId}/plot`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -99,7 +95,7 @@ export default function PlotAIPanel({
             });
 
             if (!response.ok) {
-                throw new Error("Fehler beim Speichern");
+                throw new Error(t({ de: "Fehler beim Speichern", en: "Failed to save" }));
             }
 
             const savedPoint = await response.json();
@@ -107,7 +103,7 @@ export default function PlotAIPanel({
             setPreview(null);
             setPrompt("");
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Fehler beim Speichern");
+            setError(err instanceof Error ? err.message : t({ de: "Fehler beim Speichern", en: "Failed to save" }));
         } finally {
             setIsSaving(false);
         }
@@ -129,10 +125,13 @@ export default function PlotAIPanel({
             <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-lg">
                     <Sparkles className="h-5 w-5 text-amber-500" />
-                    KI-Plot-Assistent
+                    {t({ de: "KI-Plot-Assistent", en: "AI plot assistant" })}
                 </CardTitle>
                 <CardDescription>
-                    Beschreibe eine Szene oder Wendung - die KI füllt die Details aus.
+                    {t({
+                        de: "Beschreibe eine Szene oder Wendung - die KI füllt die Details aus.",
+                        en: "Describe a scene or twist - the AI fills in the details.",
+                    })}
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -142,7 +141,10 @@ export default function PlotAIPanel({
                             <Input
                                 value={prompt}
                                 onChange={(e) => setPrompt(e.target.value)}
-                                placeholder="z.B. 'Ein unerwarteter Verrat durch den besten Freund' oder 'Der Held findet ein magisches Artefakt'"
+                                placeholder={t({
+                                    de: "z.B. 'Ein unerwarteter Verrat durch den besten Freund' oder 'Der Held findet ein magisches Artefakt'",
+                                    en: "e.g. 'An unexpected betrayal by the best friend' or 'The hero finds a magical artifact'",
+                                })}
                                 onKeyDown={(e) => e.key === "Enter" && handleGenerate()}
                                 disabled={isLoading}
                             />
@@ -166,7 +168,7 @@ export default function PlotAIPanel({
                         <div className="p-4 rounded-lg border bg-card/50 space-y-3">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div className="md:col-span-2 space-y-2">
-                                    <label className="text-xs text-muted-foreground">Titel</label>
+                                    <label className="text-xs text-muted-foreground">{t({ de: "Titel", en: "Title" })}</label>
                                     <Input
                                         value={preview.title}
                                         onChange={(e) => updatePreview("title", e.target.value)}
@@ -174,21 +176,21 @@ export default function PlotAIPanel({
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-xs text-muted-foreground">Typ</label>
+                                    <label className="text-xs text-muted-foreground">{t({ de: "Typ", en: "Type" })}</label>
                                     <select
                                         value={preview.type}
                                         onChange={(e) => updatePreview("type", e.target.value)}
                                         className="flex h-8 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                                     >
-                                        {PLOT_TYPES.map(t => (
-                                            <option key={t.value} value={t.value}>{t.label}</option>
+                                        {plotTypes.map((plotType) => (
+                                            <option key={plotType.value} value={plotType.value}>{plotType.label}</option>
                                         ))}
                                     </select>
                                 </div>
                             </div>
 
                             <div className="space-y-2">
-                                <label className="text-xs text-muted-foreground">Beschreibung</label>
+                                <label className="text-xs text-muted-foreground">{t({ de: "Beschreibung", en: "Description" })}</label>
                                 <textarea
                                     value={preview.description}
                                     onChange={(e) => updatePreview("description", e.target.value)}
@@ -206,7 +208,7 @@ export default function PlotAIPanel({
                         <div className="flex gap-2">
                             <Button variant="outline" onClick={handleCancel} disabled={isSaving} className="flex-1">
                                 <X className="h-4 w-4 mr-2" />
-                                Verwerfen
+                                {t({ de: "Verwerfen", en: "Discard" })}
                             </Button>
                             <Button onClick={handleSave} disabled={isSaving} className="flex-1">
                                 {isSaving ? (
@@ -214,7 +216,7 @@ export default function PlotAIPanel({
                                 ) : (
                                     <Check className="h-4 w-4 mr-2" />
                                 )}
-                                Speichern
+                                {t({ de: "Speichern", en: "Save" })}
                             </Button>
                         </div>
                     </div>

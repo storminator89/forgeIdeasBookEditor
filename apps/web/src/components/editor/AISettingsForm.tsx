@@ -6,6 +6,7 @@ import { Loader2, Eye, EyeOff, Save, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useI18n } from "@/components/locale-provider";
 
 type AISettings = {
     id: string;
@@ -41,6 +42,7 @@ export default function AISettingsForm({
     initialSettings,
     onSave,
 }: AISettingsFormProps) {
+    const { t } = useI18n();
     const [apiEndpoint, setApiEndpoint] = useState(
         initialSettings?.apiEndpoint || "https://api.openai.com/v1"
     );
@@ -88,7 +90,7 @@ export default function AISettingsForm({
             });
 
             if (!response.ok) {
-                throw new Error("Fehler beim Speichern");
+                throw new Error(t({ de: "Fehler beim Speichern", en: "Failed to save" }));
             }
 
             const updatedSettings = await response.json();
@@ -98,7 +100,7 @@ export default function AISettingsForm({
             // Clear the API key input after successful save
             setApiKey("");
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Unbekannter Fehler");
+            setError(err instanceof Error ? err.message : t({ de: "Unbekannter Fehler", en: "Unknown error" }));
         } finally {
             setIsSaving(false);
         }
@@ -110,29 +112,32 @@ export default function AISettingsForm({
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <Sparkles className="h-5 w-5" />
-                        API-Konfiguration
+                        {t({ de: "API-Konfiguration", en: "API configuration" })}
                     </CardTitle>
                     <CardDescription>
-                        Konfiguriere die Verbindung zu deiner KI-API.
+                        {t({ de: "Konfiguriere die Verbindung zu deiner KI-API.", en: "Configure the connection to your AI API." })}
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     {/* API Endpoint */}
                     <div className="space-y-2">
-                        <label className="text-sm font-medium">API-Endpunkt</label>
+                        <label className="text-sm font-medium">{t({ de: "API-Endpunkt", en: "API endpoint" })}</label>
                         <Input
                             value={apiEndpoint}
                             onChange={(e) => setApiEndpoint(e.target.value)}
                             placeholder="https://api.openai.com/v1"
                         />
                         <p className="text-xs text-muted-foreground">
-                            OpenAI-kompatible API-URL (z.B. OpenAI, Anthropic via Proxy, lokale LLMs)
+                            {t({
+                                de: "OpenAI-kompatible API-URL (z.B. OpenAI, Anthropic via Proxy, lokale LLMs)",
+                                en: "OpenAI-compatible API URL (e.g., OpenAI, Anthropic via proxy, local LLMs)",
+                            })}
                         </p>
                     </div>
 
                     {/* API Key */}
                     <div className="space-y-2">
-                        <label className="text-sm font-medium">API-Schlüssel</label>
+                        <label className="text-sm font-medium">{t({ de: "API-Schlüssel", en: "API key" })}</label>
                         <div className="relative">
                             <Input
                                 type={showApiKey ? "text" : "password"}
@@ -156,14 +161,17 @@ export default function AISettingsForm({
                         </div>
                         {hasExistingKey && (
                             <p className="text-xs text-green-600 dark:text-green-400">
-                                ✓ API-Schlüssel konfiguriert. Leer lassen, um den bestehenden beizubehalten.
+                                {t({
+                                    de: "? API-Schlüssel konfiguriert. Leer lassen, um den bestehenden beizubehalten.",
+                                    en: "? API key configured. Leave empty to keep the existing one.",
+                                })}
                             </p>
                         )}
                     </div>
 
                     {/* Model Selection */}
                     <div className="space-y-2">
-                        <label className="text-sm font-medium">Modell</label>
+                        <label className="text-sm font-medium">{t({ de: "Modell", en: "Model" })}</label>
                         <select
                             value={model}
                             onChange={(e) => setModel(e.target.value)}
@@ -176,7 +184,7 @@ export default function AISettingsForm({
                             ))}
                         </select>
                         <p className="text-xs text-muted-foreground">
-                            Oder gib einen benutzerdefinierten Modellnamen ein:
+                            {t({ de: "Oder gib einen benutzerdefinierten Modellnamen ein:", en: "Or enter a custom model name:" })}
                         </p>
                         <Input
                             value={model}
@@ -189,16 +197,16 @@ export default function AISettingsForm({
 
             <Card>
                 <CardHeader>
-                    <CardTitle>Generierungseinstellungen</CardTitle>
+                    <CardTitle>{t({ de: "Generierungseinstellungen", en: "Generation settings" })}</CardTitle>
                     <CardDescription>
-                        Passe die Parameter für die Textgenerierung an.
+                        {t({ de: "Passe die Parameter für die Textgenerierung an.", en: "Adjust the parameters for text generation." })}
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     {/* Temperature */}
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                            <label className="text-sm font-medium">Temperatur</label>
+                            <label className="text-sm font-medium">{t({ de: "Temperatur", en: "Temperature" })}</label>
                             <span className="text-sm text-muted-foreground">{temperature}</span>
                         </div>
                         <input
@@ -211,14 +219,17 @@ export default function AISettingsForm({
                             className="w-full"
                         />
                         <p className="text-xs text-muted-foreground">
-                            Niedrig = deterministische Antworten, Hoch = kreativer/zufälliger
+                            {t({
+                                de: "Niedrig = deterministische Antworten, Hoch = kreativer/zufälliger",
+                                en: "Low = deterministic responses, High = more creative/random",
+                            })}
                         </p>
                     </div>
 
                     {/* Max Tokens */}
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                            <label className="text-sm font-medium">Max. Tokens</label>
+                            <label className="text-sm font-medium">{t({ de: "Max. Tokens", en: "Max tokens" })}</label>
                             <span className="text-sm text-muted-foreground">{maxTokens}</span>
                         </div>
                         <input
@@ -231,7 +242,7 @@ export default function AISettingsForm({
                             className="w-full"
                         />
                         <p className="text-xs text-muted-foreground">
-                            Maximale Länge der generierten Antwort
+                            {t({ de: "Maximale Länge der generierten Antwort", en: "Maximum length of the generated response" })}
                         </p>
                     </div>
                 </CardContent>
@@ -239,20 +250,29 @@ export default function AISettingsForm({
 
             <Card>
                 <CardHeader>
-                    <CardTitle>System-Prompt</CardTitle>
+                    <CardTitle>{t({ de: "System-Prompt", en: "System prompt" })}</CardTitle>
                     <CardDescription>
-                        Optionaler Basis-Prompt der bei jeder Generierung verwendet wird.
+                        {t({
+                            de: "Optionaler Basis-Prompt der bei jeder Generierung verwendet wird.",
+                            en: "Optional base prompt used for every generation.",
+                        })}
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <textarea
                         value={systemPrompt}
                         onChange={(e) => setSystemPrompt(e.target.value)}
-                        placeholder="Du bist ein kreativer Schriftsteller, der beim Schreiben eines Buches hilft..."
+                        placeholder={t({
+                            de: "Du bist ein kreativer Schriftsteller, der beim Schreiben eines Buches hilft...",
+                            en: "You are a creative writer who helps with writing a book...",
+                        })}
                         className="w-full min-h-[150px] px-3 py-2 rounded-md border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                     <p className="text-xs text-muted-foreground">
-                        Leer lassen für den Standard-Prompt. Buch-Kontext wird automatisch hinzugefügt.
+                        {t({
+                            de: "Leer lassen für den Standard-Prompt. Buch-Kontext wird automatisch hinzugefügt.",
+                            en: "Leave empty for the default prompt. Book context is added automatically.",
+                        })}
                     </p>
                 </CardContent>
             </Card>
@@ -265,7 +285,7 @@ export default function AISettingsForm({
             )}
             {success && (
                 <div className="p-3 rounded-md bg-green-500/10 text-green-600 dark:text-green-400 text-sm">
-                    Einstellungen erfolgreich gespeichert!
+                    {t({ de: "Einstellungen erfolgreich gespeichert!", en: "Settings saved successfully!" })}
                 </div>
             )}
 
@@ -277,7 +297,7 @@ export default function AISettingsForm({
                     ) : (
                         <Save className="mr-2 h-4 w-4" />
                     )}
-                    Einstellungen speichern
+                    {t({ de: "Einstellungen speichern", en: "Save settings" })}
                 </Button>
             </div>
         </div>

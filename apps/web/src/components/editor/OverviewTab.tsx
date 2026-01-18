@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/locale-provider";
 
 import ConsistencyCheckPanel from "@/components/editor/ConsistencyCheckPanel";
 
@@ -80,6 +81,7 @@ export default function OverviewTab({
     handleCreateChapter,
     isCreatingChapter
 }: OverviewTabProps) {
+    const { t, intlLocale } = useI18n();
     const router = useRouter();
     const [isEditingBook, setIsEditingBook] = useState(false);
     const [editTitle, setEditTitle] = useState(book.title);
@@ -93,6 +95,7 @@ export default function OverviewTab({
     const coverInputRef = useRef<HTMLInputElement>(null);
 
     const totalWords = book.chapters.reduce((sum, ch) => sum + ch.wordCount, 0);
+    const pendingChapters = book.chapters.filter(ch => ch.wordCount === 0).length;
 
     const handleSaveBookDetails = async () => {
         setIsSavingBook(true);
@@ -143,7 +146,7 @@ export default function OverviewTab({
                 body: formData,
             });
 
-            if (!uploadResponse.ok) throw new Error("Upload fehlgeschlagen");
+            if (!uploadResponse.ok) throw new Error("Upload failed");
 
             const { url } = await uploadResponse.json();
 
@@ -183,7 +186,7 @@ export default function OverviewTab({
     // Generate all chapters that don't have content
     const handleGenerateAllChapters = async () => {
         if (!book.aiSettings?.apiKey) {
-            alert("Bitte konfiguriere zuerst die KI-Einstellungen.");
+            alert(t({ de: "Bitte konfiguriere zuerst die KI-Einstellungen.", en: "Please configure the AI settings first." }));
             setActiveTab("settings");
             return;
         }
@@ -194,7 +197,7 @@ export default function OverviewTab({
             .sort((a, b) => a.orderIndex - b.orderIndex);
 
         if (emptyChapters.length === 0) {
-            alert("Alle Kapitel haben bereits Inhalt.");
+            alert(t({ de: "Alle Kapitel haben bereits Inhalt.", en: "All chapters already have content." }));
             return;
         }
 
@@ -240,7 +243,7 @@ export default function OverviewTab({
                 });
 
                 // Update local state with new word count
-                const wordCount = content.replace(/<[^>]*>/g, ' ').split(/\s+/).filter(Boolean).length;
+                const wordCount = content.replace(/<[^>]*>/g, " ").split(/\s+/).filter(Boolean).length;
                 setBook(prev => ({
                     ...prev,
                     chapters: prev.chapters.map(ch =>
@@ -251,16 +254,30 @@ export default function OverviewTab({
                 }));
             }
 
-            alert(`${emptyChapters.length} Kapitel erfolgreich generiert!`);
+            alert(t({
+                de: "{{count}} Kapitel erfolgreich generiert!",
+                en: "{{count}} chapters generated successfully!",
+            }, { count: emptyChapters.length }));
         } catch (error) {
             console.error("Error generating chapters:", error);
-            alert("Fehler bei der Generierung. Bitte versuche es erneut.");
+            alert(t({ de: "Fehler bei der Generierung. Bitte versuche es erneut.", en: "Error during generation. Please try again." }));
         } finally {
             setIsGeneratingAll(false);
             setGenerationProgress(0);
             setGenerationTotal(0);
         }
     };
+
+    const stats = [
+        { label: t({ de: "Kapitel", en: "Chapters" }), value: book.chapters.length, icon: FileText, color: "text-blue-500", bg: "bg-blue-500/10" },
+        { label: t({ de: "Charaktere", en: "Characters" }), value: book.characters.length, icon: Users, color: "text-emerald-500", bg: "bg-emerald-500/10" },
+        { label: t({ de: "Handlungspunkte", en: "Plot points" }), value: book.plotPoints.length, icon: Map, color: "text-purple-500", bg: "bg-purple-500/10" },
+        { label: t({ de: "Wörter", en: "Words" }), value: new Intl.NumberFormat(intlLocale).format(totalWords), icon: Pencil, color: "text-amber-500", bg: "bg-amber-500/10" },
+    ];
+
+    const pendingLabel = pendingChapters === 1
+        ? t({ de: "1 Kapitel wartet auf Inhalt", en: "1 chapter is waiting for content" })
+        : t({ de: "{{count}} Kapitel warten auf Inhalt", en: "{{count}} chapters are waiting for content" }, { count: pendingChapters });
 
     return (
         <div className="space-y-6">
@@ -274,12 +291,12 @@ export default function OverviewTab({
                         {book.coverUrl ? (
                             <img
                                 src={book.coverUrl}
-                                alt="Buchcover"
+                                alt={t({ de: "Buchcover", en: "Book cover" })}
                                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                             />
                         ) : (
                             <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20">
-                                <div className="text-3xl text-amber-400/60 mb-2">❦</div>
+                                <div className="text-3xl text-amber-400/60 mb-2">?</div>
                             </div>
                         )}
 
@@ -301,7 +318,7 @@ export default function OverviewTab({
                                 disabled={isUploadingCover}
                             >
                                 {isUploadingCover ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3 mr-1" />}
-                                Cover
+                                {t({ de: "Cover", en: "Cover" })}
                             </Button>
                             {book.coverUrl && (
                                 <Button
@@ -311,7 +328,7 @@ export default function OverviewTab({
                                     onClick={handleRemoveCover}
                                 >
                                     <Trash2 className="h-3 w-3 mr-1" />
-                                    Löschen
+                                    {t({ de: "Löschen", en: "Remove" })}
                                 </Button>
                             )}
                         </div>
@@ -326,19 +343,19 @@ export default function OverviewTab({
                                         <Input
                                             value={editTitle}
                                             onChange={(e) => setEditTitle(e.target.value)}
-                                            placeholder="Buchtitel"
+                                            placeholder={t({ de: "Buchtitel", en: "Book title" })}
                                             className="text-2xl md:text-3xl font-bold h-auto py-2 px-3 bg-background/50 backdrop-blur"
                                         />
                                         <Input
                                             value={editAuthor}
                                             onChange={(e) => setEditAuthor(e.target.value)}
-                                            placeholder="Autor (optional)"
+                                            placeholder={t({ de: "Autor (optional)", en: "Author (optional)" })}
                                             className="text-lg h-auto py-2 px-3 bg-background/50 backdrop-blur"
                                         />
                                         <textarea
                                             value={editDescription}
                                             onChange={(e) => setEditDescription(e.target.value)}
-                                            placeholder="Beschreibung (optional)"
+                                            placeholder={t({ de: "Beschreibung (optional)", en: "Description (optional)" })}
                                             rows={3}
                                             className="w-full px-3 py-2 rounded-md border border-input bg-background/50 backdrop-blur text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
                                         />
@@ -353,7 +370,7 @@ export default function OverviewTab({
                                                 ) : (
                                                     <Check className="mr-2 h-4 w-4" />
                                                 )}
-                                                Speichern
+                                                {t({ de: "Speichern", en: "Save" })}
                                             </Button>
                                             <Button
                                                 variant="outline"
@@ -362,7 +379,7 @@ export default function OverviewTab({
                                                 disabled={isSavingBook}
                                             >
                                                 <X className="mr-2 h-4 w-4" />
-                                                Abbrechen
+                                                {t({ de: "Abbrechen", en: "Cancel" })}
                                             </Button>
                                         </div>
                                     </div>
@@ -380,7 +397,9 @@ export default function OverviewTab({
                                             </Button>
                                         </div>
                                         {book.author && (
-                                            <div className="text-lg text-muted-foreground font-medium mb-3">von {book.author}</div>
+                                            <div className="text-lg text-muted-foreground font-medium mb-3">
+                                                {t({ de: "von", en: "by" })} {book.author}
+                                            </div>
                                         )}
                                         {book.description && (
                                             <p className="text-muted-foreground max-w-2xl leading-relaxed">{book.description}</p>
@@ -396,7 +415,7 @@ export default function OverviewTab({
                                     ) : (
                                         <Plus className="mr-2 h-5 w-5" />
                                     )}
-                                    Neues Kapitel
+                                    {t({ de: "Neues Kapitel", en: "New chapter" })}
                                 </Button>
                             )}
                         </div>
@@ -426,7 +445,7 @@ export default function OverviewTab({
                                     className="h-4 w-4 rounded border-gray-300"
                                 />
                                 <Label htmlFor="hide-cover-text" className="text-sm cursor-pointer text-muted-foreground">
-                                    Titel & Autor auf Cover ausblenden
+                                    {t({ de: "Titel & Autor auf Cover ausblenden", en: "Hide title & author on cover" })}
                                 </Label>
                             </div>
                         )}
@@ -436,12 +455,7 @@ export default function OverviewTab({
 
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {[
-                    { label: "Kapitel", value: book.chapters.length, icon: FileText, color: "text-blue-500", bg: "bg-blue-500/10" },
-                    { label: "Charaktere", value: book.characters.length, icon: Users, color: "text-emerald-500", bg: "bg-emerald-500/10" },
-                    { label: "Handlungspunkte", value: book.plotPoints.length, icon: Map, color: "text-purple-500", bg: "bg-purple-500/10" },
-                    { label: "Wörter", value: totalWords.toLocaleString("de-DE"), icon: Pencil, color: "text-amber-500", bg: "bg-amber-500/10" },
-                ].map((stat, i) => (
+                {stats.map((stat) => (
                     <Card key={stat.label} className="bg-card/50 backdrop-blur-sm border-white/5 hover:border-white/10 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1">
                         <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
                             <CardDescription className="text-sm font-medium">{stat.label}</CardDescription>
@@ -464,15 +478,21 @@ export default function OverviewTab({
                             <Sparkles className="h-6 w-6 text-chart-3" />
                         </div>
                         <div className="flex-1">
-                            <h3 className="text-lg font-semibold">KI-Assistent</h3>
+                            <h3 className="text-lg font-semibold">{t({ de: "KI-Assistent", en: "AI assistant" })}</h3>
                             <p className="text-sm text-muted-foreground">
                                 {book.aiSettings?.apiKey
-                                    ? `Aktiv (${book.aiSettings.model}) - Dein Co-Autor ist bereit.`
-                                    : "Noch nicht konfiguriert. Aktiviere die KI, um Schreibblockaden zu lösen."}
+                                    ? t({
+                                        de: "Aktiv ({{model}}) - Dein Co-Autor ist bereit.",
+                                        en: "Active ({{model}}) - your co-author is ready.",
+                                    }, { model: book.aiSettings.model })
+                                    : t({
+                                        de: "Noch nicht konfiguriert. Aktiviere die KI, um Schreibblockaden zu lösen.",
+                                        en: "Not configured yet. Enable AI to break writer's block.",
+                                    })}
                             </p>
                         </div>
                         <Button variant="outline" onClick={() => setActiveTab("settings")}>
-                            Einstellungen
+                            {t({ de: "Einstellungen", en: "Settings" })}
                         </Button>
                     </div>
 
@@ -481,16 +501,19 @@ export default function OverviewTab({
                         <div className="border-t pt-6">
                             <div className="flex items-center justify-between mb-2">
                                 <div>
-                                    <h4 className="font-medium">Inhalts-Generator</h4>
+                                    <h4 className="font-medium">{t({ de: "Inhalts-Generator", en: "Content generator" })}</h4>
                                     <p className="text-sm text-muted-foreground">
                                         {isGeneratingAll
-                                            ? `Generiere Kapitel ${generationProgress} von ${generationTotal}...`
-                                            : `${book.chapters.filter(ch => ch.wordCount === 0).length} Kapitel warten auf Inhalt`}
+                                            ? t({
+                                                de: "Generiere Kapitel {{current}} von {{total}}...",
+                                                en: "Generating chapter {{current}} of {{total}}...",
+                                            }, { current: generationProgress, total: generationTotal })
+                                            : pendingLabel}
                                     </p>
                                 </div>
                                 <Button
                                     onClick={handleGenerateAllChapters}
-                                    disabled={isGeneratingAll || book.chapters.filter(ch => ch.wordCount === 0).length === 0}
+                                    disabled={isGeneratingAll || pendingChapters === 0}
                                     className="bg-chart-3 text-white hover:bg-chart-3/90"
                                 >
                                     {isGeneratingAll ? (
@@ -501,7 +524,7 @@ export default function OverviewTab({
                                     ) : (
                                         <>
                                             <Sparkles className="mr-2 h-4 w-4" />
-                                            Alle generieren
+                                            {t({ de: "Alle generieren", en: "Generate all" })}
                                         </>
                                     )}
                                 </Button>

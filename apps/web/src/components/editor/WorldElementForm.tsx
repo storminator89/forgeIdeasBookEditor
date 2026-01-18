@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { Loader2, Save, X, Sparkles, Wand2 } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Loader2, Save, X, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Globe, MapPin, Box, Lightbulb, Users, Zap, Cpu } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/locale-provider";
 
 type WorldElement = {
     id: string;
@@ -26,22 +27,23 @@ interface WorldElementFormProps {
     onCancel?: () => void;
 }
 
-const WORLD_TYPES = [
-    { value: "location", label: "Ort", icon: MapPin },
-    { value: "item", label: "Gegenstand", icon: Box },
-    { value: "concept", label: "Konzept", icon: Lightbulb },
-    { value: "organization", label: "Gruppe", icon: Users },
-    { value: "magic_system", label: "Magie", icon: Zap },
-    { value: "technology", label: "Tech", icon: Cpu },
-];
-
 export default function WorldElementForm({
     bookId,
     worldElement,
     onSave,
     onCancel,
 }: WorldElementFormProps) {
+    const { t } = useI18n();
     const isEditing = !!worldElement;
+
+    const worldTypes = useMemo(() => ([
+        { value: "location", label: t({ de: "Ort", en: "Location" }), icon: MapPin },
+        { value: "item", label: t({ de: "Gegenstand", en: "Item" }), icon: Box },
+        { value: "concept", label: t({ de: "Konzept", en: "Concept" }), icon: Lightbulb },
+        { value: "organization", label: t({ de: "Gruppe", en: "Group" }), icon: Users },
+        { value: "magic_system", label: t({ de: "Magie", en: "Magic" }), icon: Zap },
+        { value: "technology", label: t({ de: "Tech", en: "Technology" }), icon: Cpu },
+    ]), [t]);
 
     const [name, setName] = useState(worldElement?.name || "");
     const [type, setType] = useState(worldElement?.type || "location");
@@ -51,12 +53,14 @@ export default function WorldElementForm({
     const [aiPrompt, setAiPrompt] = useState("");
     const [error, setError] = useState<string | null>(null);
 
+    const typeLabel = worldTypes.find((worldType) => worldType.value === type)?.label || type;
+
     // Filtered types for selection to ensure icon lookup works
-    const SelectedIcon = WORLD_TYPES.find(t => t.value === type)?.icon || Globe;
+    const SelectedIcon = worldTypes.find(t => t.value === type)?.icon || Globe;
 
     const handleSave = async () => {
         if (!name.trim()) {
-            setError("Name ist erforderlich");
+            setError(t({ de: "Name ist erforderlich", en: "Name is required" }));
             return;
         }
 
@@ -82,13 +86,13 @@ export default function WorldElementForm({
             });
 
             if (!response.ok) {
-                throw new Error("Fehler beim Speichern");
+                throw new Error(t({ de: "Fehler beim Speichern", en: "Failed to save" }));
             }
 
             const savedWorldElement = await response.json();
             onSave?.(savedWorldElement);
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Unbekannter Fehler");
+            setError(err instanceof Error ? err.message : t({ de: "Unbekannter Fehler", en: "Unknown error" }));
         } finally {
             setIsSaving(false);
         }
@@ -96,7 +100,7 @@ export default function WorldElementForm({
 
     const handleGenerate = async () => {
         if (!aiPrompt.trim() && !name.trim()) {
-            setError("Bitte gib einen Namen oder einen Prompt ein.");
+            setError(t({ de: "Bitte gib einen Namen oder einen Prompt ein.", en: "Please enter a name or a prompt." }));
             return;
         }
 
@@ -104,7 +108,10 @@ export default function WorldElementForm({
         setError(null);
 
         try {
-            const promptToSend = aiPrompt.trim() || `Erstelle eine Beschreibung für ${type}: "${name}"`;
+            const promptToSend = aiPrompt.trim() || t({
+                de: "Erstelle eine Beschreibung für {{type}}: \"{{name}}\"",
+                en: "Create a description for {{type}}: \"{{name}}\"",
+            }, { type: typeLabel, name });
 
             const response = await fetch(`/api/books/${bookId}/world/ai`, {
                 method: "POST",
@@ -116,18 +123,18 @@ export default function WorldElementForm({
                 }),
             });
 
-            if (!response.ok) throw new Error("KI-Generierung fehlgeschlagen");
+            if (!response.ok) throw new Error(t({ de: "KI-Generierung fehlgeschlagen", en: "AI generation failed" }));
 
             const data = await response.json();
             const generated = data.worldElement;
 
             if (generated) {
                 if (generated.name) setName(generated.name);
-                if (generated.type && WORLD_TYPES.some(t => t.value === generated.type)) setType(generated.type);
+                if (generated.type && worldTypes.some(t => t.value === generated.type)) setType(generated.type);
                 if (generated.description) setDescription(generated.description);
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Fehler bei der Generierung");
+            setError(err instanceof Error ? err.message : t({ de: "Fehler bei der Generierung", en: "Error during generation" }));
         } finally {
             setIsGenerating(false);
         }
@@ -141,10 +148,10 @@ export default function WorldElementForm({
                     <div className="flex items-center justify-between">
                         <div>
                             <CardTitle className="flex items-center gap-2">
-                                {isEditing ? "Element bearbeiten" : "Neues Weltelement"}
+                                {isEditing ? t({ de: "Element bearbeiten", en: "Edit element" }) : t({ de: "Neues Weltelement", en: "New world element" })}
                             </CardTitle>
                             <CardDescription>
-                                Erweitere deine Welt mit Orten, Gegenständen und mehr.
+                                {t({ de: "Erweitere deine Welt mit Orten, Gegenständen und mehr.", en: "Expand your world with locations, items, and more." })}
                             </CardDescription>
                         </div>
                         <Button variant="ghost" size="icon" onClick={onCancel} className="rounded-full hover:bg-white/10">
@@ -157,7 +164,10 @@ export default function WorldElementForm({
                     <div className="bg-primary/5 rounded-xl p-4 border border-primary/10">
                         <div className="flex gap-2">
                             <Input
-                                placeholder="Beschreibe, was du erstellen möchtest (oder lass leer für den Namen)..."
+                                placeholder={t({
+                                    de: "Beschreibe, was du erstellen möchtest (oder lass leer für den Namen)...",
+                                    en: "Describe what you'd like to create (or leave empty to use the name)...",
+                                })}
                                 value={aiPrompt}
                                 onChange={(e) => setAiPrompt(e.target.value)}
                                 className="bg-background/50 border-primary/20 focus-visible:ring-primary/30"
@@ -173,20 +183,22 @@ export default function WorldElementForm({
                         </div>
                         <p className="text-[10px] text-muted-foreground mt-2 flex items-center gap-1">
                             <Sparkles className="h-3 w-3 inline text-purple-500" />
-                            {isEditing ? "KI kann die Beschreibung verbessern." : "KI kann Name und Beschreibung vorschlagen."}
+                            {isEditing
+                                ? t({ de: "KI kann die Beschreibung verbessern.", en: "AI can improve the description." })
+                                : t({ de: "KI kann Name und Beschreibung vorschlagen.", en: "AI can suggest name and description." })}
                         </p>
                     </div>
 
                     <div className="space-y-4">
                         {/* Type Selection */}
                         <div className="grid grid-cols-3 gap-2">
-                            {WORLD_TYPES.map((t) => {
-                                const Icon = t.icon;
-                                const isSelected = type === t.value;
+                            {worldTypes.map((worldType) => {
+                                const Icon = worldType.icon;
+                                const isSelected = type === worldType.value;
                                 return (
                                     <div
-                                        key={t.value}
-                                        onClick={() => setType(t.value)}
+                                        key={worldType.value}
+                                        onClick={() => setType(worldType.value)}
                                         className={cn(
                                             "cursor-pointer rounded-lg border p-3 flex flex-col items-center justify-center gap-2 transition-all duration-200",
                                             isSelected
@@ -195,7 +207,7 @@ export default function WorldElementForm({
                                         )}
                                     >
                                         <Icon className="h-5 w-5" />
-                                        <span className="text-xs font-medium">{t.label}</span>
+                                        <span className="text-xs font-medium">{worldType.label}</span>
                                     </div>
                                 );
                             })}
@@ -203,13 +215,13 @@ export default function WorldElementForm({
 
                         {/* Name */}
                         <div className="space-y-2">
-                            <label className="text-sm font-medium">Name</label>
+                            <label className="text-sm font-medium">{t({ de: "Name", en: "Name" })}</label>
                             <div className="relative">
                                 <SelectedIcon className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                                 <Input
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
-                                    placeholder="Name des Elements"
+                                    placeholder={t({ de: "Name des Elements", en: "Element name" })}
                                     className="pl-9"
                                 />
                             </div>
@@ -217,11 +229,11 @@ export default function WorldElementForm({
 
                         {/* Description */}
                         <div className="space-y-2">
-                            <label className="text-sm font-medium">Beschreibung</label>
+                            <label className="text-sm font-medium">{t({ de: "Beschreibung", en: "Description" })}</label>
                             <textarea
                                 value={description}
                                 onChange={(e) => setDescription(e.target.value)}
-                                placeholder="Detaillierte Beschreibung..."
+                                placeholder={t({ de: "Detaillierte Beschreibung...", en: "Detailed description..." })}
                                 className="w-full min-h-[150px] px-3 py-2 rounded-md border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
                             />
                         </div>
@@ -237,7 +249,7 @@ export default function WorldElementForm({
                     {/* Actions */}
                     <div className="flex justify-end gap-3 pt-4 border-t border-border/50">
                         <Button variant="ghost" onClick={onCancel}>
-                            Abbrechen
+                            {t({ de: "Abbrechen", en: "Cancel" })}
                         </Button>
                         <Button onClick={handleSave} disabled={isSaving}>
                             {isSaving ? (
@@ -245,7 +257,7 @@ export default function WorldElementForm({
                             ) : (
                                 <Save className="mr-2 h-4 w-4" />
                             )}
-                            Speichern
+                            {t({ de: "Speichern", en: "Save" })}
                         </Button>
                     </div>
                 </CardContent>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
     Globe,
     MapPin,
@@ -11,7 +11,6 @@ import {
     Cpu,
     Plus,
     Search,
-    Filter,
     Trash2,
     Edit2,
     MoreVertical
@@ -28,6 +27,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/locale-provider";
 
 // Types (should ideally be shared)
 type WorldElement = {
@@ -45,24 +45,25 @@ type WorldTabProps = {
     onCreate: () => void;
 };
 
-const WORLD_TYPES = [
-    { value: "all", label: "Alle", icon: Globe },
-    { value: "location", label: "Orte", icon: MapPin },
-    { value: "item", label: "Gegenstände", icon: Box },
-    { value: "concept", label: "Konzepte", icon: Lightbulb },
-    { value: "organization", label: "Gruppen", icon: Users },
-    { value: "magic_system", label: "Magie", icon: Zap },
-    { value: "technology", label: "Technik", icon: Cpu },
-];
-
 export default function WorldTab({
     worldElements,
     onEdit,
     onDelete,
     onCreate
 }: WorldTabProps) {
+    const { t } = useI18n();
     const [searchQuery, setSearchQuery] = useState("");
     const [activeFilter, setActiveFilter] = useState("all");
+
+    const worldTypes = useMemo(() => ([
+        { value: "all", label: t({ de: "Alle", en: "All" }), icon: Globe },
+        { value: "location", label: t({ de: "Orte", en: "Locations" }), icon: MapPin },
+        { value: "item", label: t({ de: "Gegenstände", en: "Items" }), icon: Box },
+        { value: "concept", label: t({ de: "Konzepte", en: "Concepts" }), icon: Lightbulb },
+        { value: "organization", label: t({ de: "Gruppen", en: "Groups" }), icon: Users },
+        { value: "magic_system", label: t({ de: "Magie", en: "Magic" }), icon: Zap },
+        { value: "technology", label: t({ de: "Technik", en: "Technology" }), icon: Cpu },
+    ]), [t]);
 
     const filteredElements = worldElements.filter(element => {
         const matchesSearch = element.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -72,12 +73,12 @@ export default function WorldTab({
     });
 
     const getTypeIcon = (type: string) => {
-        const found = WORLD_TYPES.find(t => t.value === type);
+        const found = worldTypes.find((worldType) => worldType.value === type);
         return found ? found.icon : Globe;
     };
 
     const getTypeLabel = (type: string) => {
-        const found = WORLD_TYPES.find(t => t.value === type);
+        const found = worldTypes.find((worldType) => worldType.value === type);
         return found ? found.label : type;
     };
 
@@ -88,22 +89,22 @@ export default function WorldTab({
                 <Card className="md:col-span-3 bg-gradient-to-br from-indigo-500/10 via-purple-500/5 to-background border-indigo-500/20 shadow-sm relative overflow-hidden">
                     <div className="absolute inset-0 bg-grid-white/10 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))]" />
                     <CardHeader className="relative z-10 pb-2">
-                        <CardTitle className="text-xl font-serif">World Building Dashboard</CardTitle>
-                        <CardDescription>Verwalte die Lore, Orte und Gegenstände deiner Welt.</CardDescription>
+                        <CardTitle className="text-xl font-serif">{t({ de: "World-Building-Dashboard", en: "World Building Dashboard" })}</CardTitle>
+                        <CardDescription>{t({ de: "Verwalte die Lore, Orte und Gegenstände deiner Welt.", en: "Manage the lore, locations, and items of your world." })}</CardDescription>
                     </CardHeader>
                     <CardContent className="relative z-10 pt-0">
                         <div className="flex gap-4 mt-2">
                             <div className="flex items-center gap-2 text-sm text-muted-foreground bg-background/50 backdrop-blur px-3 py-1.5 rounded-full border border-border/50">
                                 <MapPin className="h-4 w-4 text-emerald-500" />
-                                <span className="font-medium text-foreground">{worldElements.filter(e => e.type === "location").length}</span> Orte
+                                <span className="font-medium text-foreground">{worldElements.filter(e => e.type === "location").length}</span> {t({ de: "Orte", en: "Locations" })}
                             </div>
                             <div className="flex items-center gap-2 text-sm text-muted-foreground bg-background/50 backdrop-blur px-3 py-1.5 rounded-full border border-border/50">
                                 <Users className="h-4 w-4 text-blue-500" />
-                                <span className="font-medium text-foreground">{worldElements.filter(e => e.type === "organization").length}</span> Gruppen
+                                <span className="font-medium text-foreground">{worldElements.filter(e => e.type === "organization").length}</span> {t({ de: "Gruppen", en: "Groups" })}
                             </div>
                             <div className="flex items-center gap-2 text-sm text-muted-foreground bg-background/50 backdrop-blur px-3 py-1.5 rounded-full border border-border/50">
                                 <Zap className="h-4 w-4 text-amber-500" />
-                                <span className="font-medium text-foreground">{worldElements.filter(e => e.type === "magic_system").length}</span> Magie
+                                <span className="font-medium text-foreground">{worldElements.filter(e => e.type === "magic_system").length}</span> {t({ de: "Magie", en: "Magic" })}
                             </div>
                         </div>
                     </CardContent>
@@ -113,20 +114,20 @@ export default function WorldTab({
                     <div className="rounded-full bg-primary/10 p-3 mb-3 group-hover:scale-110 transition-transform duration-300">
                         <Plus className="h-6 w-6 text-primary" />
                     </div>
-                    <span className="font-medium text-sm">Neues Element</span>
+                    <span className="font-medium text-sm">{t({ de: "Neues Element", en: "New element" })}</span>
                 </Card>
             </div>
 
             {/* Controls */}
             <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between sticky top-0 z-20 bg-background/95 backdrop-blur py-2">
                 <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0 w-full md:w-auto no-scrollbar">
-                    {WORLD_TYPES.map(type => {
-                        const Icon = type.icon;
-                        const isActive = activeFilter === type.value;
+                    {worldTypes.map((worldType) => {
+                        const Icon = worldType.icon;
+                        const isActive = activeFilter === worldType.value;
                         return (
                             <button
-                                key={type.value}
-                                onClick={() => setActiveFilter(type.value)}
+                                key={worldType.value}
+                                onClick={() => setActiveFilter(worldType.value)}
                                 className={cn(
                                     "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap",
                                     isActive
@@ -135,7 +136,7 @@ export default function WorldTab({
                                 )}
                             >
                                 <Icon className="h-3.5 w-3.5" />
-                                {type.label}
+                                {worldType.label}
                             </button>
                         );
                     })}
@@ -144,7 +145,7 @@ export default function WorldTab({
                 <div className="relative w-full md:w-64">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
-                        placeholder="Suche..."
+                        placeholder={t({ de: "Suche...", en: "Search..." })}
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="pl-9 h-9 bg-secondary/30 border-transparent focus:border-primary focus:bg-background transition-all"
@@ -164,14 +165,17 @@ export default function WorldTab({
                         <div className="bg-secondary/50 p-6 rounded-full mb-4">
                             <Globe className="h-10 w-10 text-muted-foreground/50" />
                         </div>
-                        <h3 className="text-lg font-medium">Keine Elemente gefunden</h3>
+                        <h3 className="text-lg font-medium">{t({ de: "Keine Elemente gefunden", en: "No elements found" })}</h3>
                         <p className="text-muted-foreground text-sm max-w-xs mt-2 mb-6">
-                            Es gibt keine Weltelemente, die deiner Suche oder dem Filter entsprechen.
+                            {t({
+                                de: "Es gibt keine Weltelemente, die deiner Suche oder dem Filter entsprechen.",
+                                en: "There are no world elements matching your search or filter.",
+                            })}
                         </p>
                         {activeFilter !== "all" || searchQuery ? (
-                            <Button variant="outline" onClick={() => { setActiveFilter("all"); setSearchQuery(""); }}>Filter zurücksetzen</Button>
+                            <Button variant="outline" onClick={() => { setActiveFilter("all"); setSearchQuery(""); }}>{t({ de: "Filter zurücksetzen", en: "Reset filters" })}</Button>
                         ) : (
-                            <Button onClick={onCreate}>Erstes Element erstellen</Button>
+                            <Button onClick={onCreate}>{t({ de: "Erstes Element erstellen", en: "Create the first element" })}</Button>
                         )}
                     </motion.div>
                 ) : (
@@ -236,13 +240,13 @@ export default function WorldTab({
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="end">
                                                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(element); }}>
-                                                            <Edit2 className="mr-2 h-4 w-4" /> Bearbeiten
+                                                            <Edit2 className="mr-2 h-4 w-4" /> {t({ de: "Bearbeiten", en: "Edit" })}
                                                         </DropdownMenuItem>
                                                         <DropdownMenuItem
                                                             className="text-destructive focus:text-destructive"
                                                             onClick={(e) => { e.stopPropagation(); onDelete(element.id); }}
                                                         >
-                                                            <Trash2 className="mr-2 h-4 w-4" /> Löschen
+                                                            <Trash2 className="mr-2 h-4 w-4" /> {t({ de: "Löschen", en: "Delete" })}
                                                         </DropdownMenuItem>
                                                     </DropdownMenuContent>
                                                 </DropdownMenu>
@@ -252,7 +256,7 @@ export default function WorldTab({
                                         <div className="p-4 flex-1 flex flex-col">
                                             <h3 className="text-lg font-bold font-serif mb-2 group-hover:text-primary transition-colors">{element.name}</h3>
                                             <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed">
-                                                {element.description || <span className="italic opacity-50">Keine Beschreibung...</span>}
+                                                {element.description || <span className="italic opacity-50">{t({ de: "Keine Beschreibung...", en: "No description..." })}</span>}
                                             </p>
                                         </div>
                                     </div>
