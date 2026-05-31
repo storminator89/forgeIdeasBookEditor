@@ -60,13 +60,27 @@ export default function BookPreview({
     const [isExporting, setIsExporting] = useState(false);
     const [isExportingEpub, setIsExportingEpub] = useState(false);
     const [isExportingDocx, setIsExportingDocx] = useState(false);
+    const [viewMode, setViewMode] = useState<"single" | "book">("book");
     const bookRef = useRef<HTMLDivElement>(null);
 
     // Track which chapters we've already fetched to prevent re-fetching
     const fetchedChaptersRef = useRef<Set<string>>(new Set());
 
+    // Automatically fall back to single page view on narrow screens
+    useEffect(() => {
+        const handleResize = () => {
+            if (window.innerWidth < 1024) {
+                setViewMode("single");
+            } else {
+                setViewMode("book");
+            }
+        };
+        handleResize();
+        window.addEventListener("resize", handleResize);
+        return () => window.removeEventListener("resize", handleResize);
+    }, []);
+
     // Helper function to split HTML content into pages
-    // Uses conservative approach to prevent text cutoff
     const splitContentIntoPages = useCallback((html: string, charsPerPage: number = 1800): string[] => {
         if (!html || html.trim() === "") return [""];
 
@@ -74,22 +88,34 @@ export default function BookPreview({
         if (!tempDiv) {
             // Server-side fallback - split by paragraph tags
             const pages: string[] = [];
-            // Split by closing </p> tags to ensure we never cut mid-paragraph
             const paragraphs = html.split('</p>').map(p => p.trim()).filter(Boolean).map(p => p + '</p>');
 
             let currentPage = "";
             let currentLength = 0;
+            let pageHasImage = false;
 
             for (const para of paragraphs) {
                 const textLength = para.replace(/<[^>]*>/g, '').length;
+                const hasImg = para.includes('<img');
 
-                if (currentLength + textLength > charsPerPage && currentPage !== "") {
+                let imgPenalty = 0;
+                if (hasImg || pageHasImage) {
+                    const isBlock = !para.includes('w-[30%]') && !para.includes('w-[45%]');
+                    imgPenalty = isBlock ? 950 : 650;
+                }
+                const limit = Math.max(300, charsPerPage - imgPenalty);
+
+                if (currentLength + textLength > limit && currentPage !== "") {
                     pages.push(currentPage);
                     currentPage = para;
                     currentLength = textLength;
+                    pageHasImage = hasImg;
                 } else {
                     currentPage += para;
                     currentLength += textLength;
+                    if (hasImg) {
+                        pageHasImage = true;
+                    }
                 }
             }
 
@@ -104,12 +130,10 @@ export default function BookPreview({
         const children = Array.from(tempDiv.children);
 
         if (children.length === 0) {
-            // No block elements, just wrap in paragraph
             const text = tempDiv.textContent || "";
             if (text.length <= charsPerPage) {
                 return [`<p>${text}</p>`];
             }
-            // Split at sentence boundaries for long text
             const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
             const pages: string[] = [];
             let currentPage = "";
@@ -131,22 +155,34 @@ export default function BookPreview({
         const pages: string[] = [];
         let currentPage = "";
         let currentLength = 0;
+        let pageHasImage = false;
 
         for (const child of children) {
             const childHtml = (child as HTMLElement).outerHTML;
             const childText = (child as HTMLElement).textContent || "";
             const childLength = childText.length;
 
-            // If adding this child would exceed the limit AND we already have content, start new page
-            if (currentLength + childLength > charsPerPage && currentPage !== "") {
+            const hasImg = child.tagName.toLowerCase() === "img" || child.querySelector("img") !== null;
+            let imgPenalty = 0;
+            if (hasImg || pageHasImage) {
+                const imgEl = child.tagName.toLowerCase() === "img" ? child : child.querySelector("img");
+                const isBlock = imgEl?.classList.contains("block") || imgEl?.classList.contains("mx-auto") || !imgEl?.className;
+                imgPenalty = isBlock ? 950 : 650;
+            }
+            const limit = Math.max(300, charsPerPage - imgPenalty);
+
+            if (currentLength + childLength > limit && currentPage !== "") {
                 pages.push(currentPage);
                 currentPage = "";
                 currentLength = 0;
+                pageHasImage = false;
             }
 
-            // Add the child to current page
             currentPage += childHtml;
             currentLength += childLength;
+            if (hasImg) {
+                pageHasImage = true;
+            }
         }
 
         if (currentPage) {
@@ -156,7 +192,7 @@ export default function BookPreview({
         return pages.length > 0 ? pages : [""];
     }, []);
 
-    // Create pages from chapters - memoized
+    // Create pages from chapters
     const allPages = useMemo(() => {
         const pages = chapters.flatMap((chapter, chapterIndex) => {
             // Chapter title page
@@ -172,8 +208,7 @@ export default function BookPreview({
 
             // Split content into multiple pages
             const chapterContent = loadedContent[chapter.id] || chapter.content;
-            // Conservative limit to prevent text cutoff at page bottom
-            const contentChunks = splitContentIntoPages(chapterContent, 1600);
+            const contentChunks = splitContentIntoPages(chapterContent, 1500);
 
             const contentPages = contentChunks.map((chunk, pageIndex) => ({
                 type: "content" as const,
@@ -188,7 +223,6 @@ export default function BookPreview({
             return [titlePage, ...contentPages];
         });
 
-        // Add cover page at the beginning
         return [
             {
                 type: "cover" as const,
@@ -204,53 +238,79 @@ export default function BookPreview({
     }, [chapters, loadedContent, bookTitle, splitContentIntoPages]);
 
     const currentPageData = allPages[currentPage];
-    const hasNext = currentPage < allPages.length - 1;
+
+    // Left and Right page calculations for double page view
+    const leftPageData = currentPageData;
+    const rightPageData = (viewMode === "book" && currentPage + 1 < allPages.length) 
+        ? allPages[currentPage + 1] 
+        : null;
+
+    // Navigation bounds
+    const hasNext = viewMode === "single"
+        ? currentPage < allPages.length - 1
+        : (currentPage === 0 ? allPages.length > 1 : currentPage + 2 < allPages.length);
+
     const hasPrev = currentPage > 0;
 
-    // Load chapter content when viewing a content page
+    // Load chapter content when viewing
     useEffect(() => {
-        const loadContent = async () => {
-            if (
-                currentPageData?.type === "content" &&
-                currentPageData.chapterId &&
-                !fetchedChaptersRef.current.has(currentPageData.chapterId)
-            ) {
-                // Mark as fetching before we start
-                fetchedChaptersRef.current.add(currentPageData.chapterId);
-                setLoadingChapterId(currentPageData.chapterId);
+        const loadContentForId = async (id: string) => {
+            if (!id || fetchedChaptersRef.current.has(id)) return;
+            fetchedChaptersRef.current.add(id);
+            setLoadingChapterId(id);
 
-                try {
-                    const response = await fetch(
-                        `/api/books/${bookId}/chapters/${currentPageData.chapterId}`
-                    );
-                    if (response.ok) {
-                        const data = await response.json();
-                        setLoadedContent((prev) => ({
-                            ...prev,
-                            [currentPageData.chapterId]: data.content || "",
-                        }));
-                    }
-                } catch (error) {
-                    console.error("Error loading chapter content:", error);
-                    // Remove from fetched set on error so we can retry
-                    fetchedChaptersRef.current.delete(currentPageData.chapterId);
-                } finally {
-                    setLoadingChapterId(null);
+            try {
+                const response = await fetch(`/api/books/${bookId}/chapters/${id}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    setLoadedContent((prev) => ({
+                        ...prev,
+                        [id]: data.content || "",
+                    }));
                 }
+            } catch (error) {
+                console.error("Error loading chapter content:", error);
+                fetchedChaptersRef.current.delete(id);
+            } finally {
+                setLoadingChapterId(null);
             }
         };
-        loadContent();
-    }, [currentPage, bookId, currentPageData?.type, currentPageData?.chapterId]);
+
+        if (leftPageData?.chapterId) {
+            loadContentForId(leftPageData.chapterId);
+        }
+        if (rightPageData?.chapterId) {
+            loadContentForId(rightPageData.chapterId);
+        }
+    }, [currentPage, bookId, leftPageData?.chapterId, rightPageData?.chapterId, viewMode]);
 
     const goToNextPage = () => {
-        if (hasNext) setCurrentPage(currentPage + 1);
+        if (!hasNext) return;
+        if (viewMode === "single") {
+            setCurrentPage(currentPage + 1);
+        } else {
+            if (currentPage === 0) {
+                setCurrentPage(1);
+            } else {
+                setCurrentPage(currentPage + 2);
+            }
+        }
     };
 
     const goToPrevPage = () => {
-        if (hasPrev) setCurrentPage(currentPage - 1);
+        if (!hasPrev) return;
+        if (viewMode === "single") {
+            setCurrentPage(currentPage - 1);
+        } else {
+            if (currentPage === 1) {
+                setCurrentPage(0);
+            } else {
+                setCurrentPage(Math.max(currentPage - 2, 1));
+            }
+        }
     };
 
-    const isLoading = loadingChapterId === currentPageData?.chapterId;
+    const isLoading = loadingChapterId === leftPageData?.chapterId || loadingChapterId === rightPageData?.chapterId;
 
     const escapeXml = (value: string) =>
         value
@@ -298,7 +358,7 @@ export default function BookPreview({
         return match ? match[0] : ".jpg";
     };
 
-    // PDF Export function — native text-based rendering
+    // State-of-the-art PDF Export with Copyright, TOC, and Times-Roman Serif font
     const exportToPdf = async () => {
         if (chapters.length === 0) return;
 
@@ -307,113 +367,49 @@ export default function BookPreview({
         try {
             const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
 
-            // A4 layout constants
+            // Helper to preload an image and get its dimensions
+            const loadImage = (src: string): Promise<{ dataUrl: string; width: number; height: number } | null> => {
+                return new Promise((resolve) => {
+                    const img = new Image();
+                    img.crossOrigin = "anonymous";
+                    img.onload = () => {
+                        const canvas = document.createElement("canvas");
+                        canvas.width = img.naturalWidth;
+                        canvas.height = img.naturalHeight;
+                        const ctx = canvas.getContext("2d");
+                        if (ctx) {
+                            ctx.drawImage(img, 0, 0);
+                            try {
+                                const dataUrl = canvas.toDataURL("image/jpeg");
+                                resolve({ dataUrl, width: img.naturalWidth, height: img.naturalHeight });
+                                return;
+                            } catch (e) {
+                                console.error("Canvas export failed for PDF image preloading:", e);
+                            }
+                        }
+                        resolve({ dataUrl: src, width: img.naturalWidth, height: img.naturalHeight });
+                    };
+                    img.onerror = () => {
+                        resolve(null);
+                    };
+                    img.src = resolveUrl(src);
+                });
+            };
+
+            // A4 page parameters with Golden Ratio margins
             const W = 210;
             const H = 297;
-            const marginLeft = 25;
-            const marginRight = 20;
+            const marginLeft = 30; // Bindungskante (Gutter margin)
+            const marginRight = 25;
             const marginTop = 25;
             const marginBottom = 25;
             const contentW = W - marginLeft - marginRight;
 
-            // Typography
-            const bodySize = 11;
-            const bodyLeading = 5.5; // line height in mm
-            const indentFirstLine = 7; // mm
-            const paraSpacing = 3; // mm after paragraph
-
-            // State
-            let y = marginTop;
-            let pageNum = 0;
-
-            const addPage = () => {
-                if (pageNum > 0) pdf.addPage();
-                pageNum++;
-                y = marginTop;
-                // Page number footer
-                pdf.setFontSize(9);
-                pdf.setTextColor(160);
-                pdf.text(String(pageNum), W / 2, H - 12, { align: "center" });
-                pdf.setTextColor(0);
-                y = marginTop;
-            };
-
-            const needSpace = (mm: number) => {
-                if (y + mm > H - marginBottom) {
-                    addPage();
-                    return true;
-                }
-                return false;
-            };
-
-            // ── Cover page ──
-            addPage();
-
-            // Fetch cover image if available
-            let coverImgData: string | null = null;
-            if (coverUrl) {
-                try {
-                    const resp = await fetch(coverUrl);
-                    const blob = await resp.blob();
-                    const reader = new FileReader();
-                    coverImgData = await new Promise<string>((resolve, reject) => {
-                        reader.onload = () => resolve(reader.result as string);
-                        reader.onerror = reject;
-                        reader.readAsDataURL(blob);
-                    });
-                } catch { /* skip cover image */ }
-            }
-
-            if (coverImgData) {
-                try {
-                    const img = new Image();
-                    img.src = coverImgData;
-                    await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; });
-                    const imgAspect = img.width / img.height;
-                    const imgW = contentW;
-                    const imgH = imgW / imgAspect;
-                    const imgY = (H - imgH) / 2;
-                    const ext = coverImgData.includes("image/png") ? "PNG" : "JPEG";
-                    pdf.addImage(coverImgData, ext, marginLeft, imgY, imgW, imgH);
-
-                    if (!hideCoverText) {
-                        pdf.setDrawColor(255);
-                        pdf.setFillColor(255, 255, 255);
-                        pdf.rect(marginLeft, imgY + imgH - 30, imgW, 30, "F");
-                        pdf.setFontSize(24);
-                        pdf.setFont("helvetica", "bold");
-                        pdf.text(bookTitle, W / 2, imgY + imgH - 18, { align: "center" });
-                        pdf.setFontSize(13);
-                        pdf.setFont("helvetica", "italic");
-                        pdf.text(author, W / 2, imgY + imgH - 8, { align: "center" });
-                    }
-                } catch {
-                    // fallback to text-only cover
-                    coverImgData = null;
-                }
-            }
-
-            if (!coverImgData) {
-                // Text-only cover
-                pdf.setFontSize(32);
-                pdf.setFont("helvetica", "bold");
-                const titleLines = pdf.splitTextToSize(bookTitle, contentW - 20);
-                const titleBlockH = titleLines.length * 12;
-                const coverY = (H - titleBlockH) / 2 - 10;
-                pdf.text(titleLines, W / 2, coverY, { align: "center" });
-
-                // Decorative line
-                pdf.setDrawColor(180, 83, 9); // amber
-                pdf.setLineWidth(0.5);
-                const lineY = coverY + titleBlockH + 5;
-                pdf.line(W / 2 - 20, lineY, W / 2 + 20, lineY);
-
-                pdf.setFontSize(14);
-                pdf.setFont("helvetica", "italic");
-                pdf.setTextColor(100);
-                pdf.text(author, W / 2, lineY + 12, { align: "center" });
-                pdf.setTextColor(0);
-            }
+            // Typography variables
+            const bodySize = 10.5;
+            const bodyLeading = 5.2; // space in mm
+            const indentFirstLine = 0; // Remove indentations completely for clean modern block paragraphs!
+            const paraSpacing = 2.5; // Small elegant vertical gap between paragraphs to distinguish them!
 
             // ── Fetch all chapter content ──
             const orderedChapters = [...chapters].sort((a, b) => a.orderIndex - b.orderIndex);
@@ -433,17 +429,40 @@ export default function BookPreview({
                 chapterContents.push({ title: ch.title, html: content });
             }
 
-            // ── HTML → document model parser ──
-            type TextRun = { text: string; bold?: boolean; italic?: boolean };
-            type Block =
-                | { type: "h1" | "h2" | "h3"; runs: TextRun[] }
-                | { type: "p"; runs: TextRun[]; indent?: boolean }
-                | { type: "quote"; runs: TextRun[] }
-                | { type: "li"; runs: TextRun[]; ordered?: boolean; index?: number }
-                | { type: "hr" };
+            // ── Fetch and Preload all images in the book ──
+            const imageCache = new Map<string, { dataUrl: string; width: number; height: number }>();
+            const allSrcs = new Set<string>();
+            for (const ch of chapterContents) {
+                const tmp = document.createElement("div");
+                tmp.innerHTML = ch.html;
+                const images = Array.from(tmp.querySelectorAll("img"));
+                for (const img of images) {
+                    const src = img.getAttribute("src");
+                    if (src) allSrcs.add(src);
+                }
+            }
 
-            const parseRuns = (node: Node): TextRun[] => {
-                const runs: TextRun[] = [];
+            await Promise.all(
+                Array.from(allSrcs).map(async (src) => {
+                    const data = await loadImage(src);
+                    if (data) {
+                        imageCache.set(src, data);
+                    }
+                })
+            );
+
+            // HTML parser elements
+            type TextRunType = { text: string; bold?: boolean; italic?: boolean };
+            type Block =
+                | { type: "h1" | "h2" | "h3"; runs: TextRunType[] }
+                | { type: "p"; runs: TextRunType[]; indent?: boolean }
+                | { type: "quote"; runs: TextRunType[] }
+                | { type: "li"; runs: TextRunType[]; ordered?: boolean; index?: number }
+                | { type: "hr" }
+                | { type: "img"; src: string };
+
+            const parseRuns = (node: Node): TextRunType[] => {
+                const runs: TextRunType[] = [];
                 if (node.nodeType === Node.TEXT_NODE) {
                     const t = node.textContent || "";
                     if (t) runs.push({ text: t });
@@ -456,9 +475,7 @@ export default function BookPreview({
 
                 if (tag === "strong" || tag === "b") return childRuns.map(r => ({ ...r, bold: true }));
                 if (tag === "em" || tag === "i") return childRuns.map(r => ({ ...r, italic: true }));
-                if (tag === "u") return childRuns; // jsPDF doesn't support underline easily
                 if (tag === "br") return [{ text: "\n" }];
-                if (tag === "img") return []; // images handled separately if needed
                 return childRuns;
             };
 
@@ -471,6 +488,16 @@ export default function BookPreview({
                 for (const child of Array.from(tmp.children)) {
                     const tag = child.tagName.toLowerCase();
                     const runs = parseRuns(child);
+
+                    // Check if this element or any of its descendants is an image
+                    const imgEl = tag === "img" ? child : child.querySelector("img");
+                    if (imgEl) {
+                        const src = imgEl.getAttribute("src") || "";
+                        if (src) {
+                            blocks.push({ type: "img", src });
+                            continue;
+                        }
+                    }
 
                     if (tag === "h1") blocks.push({ type: "h1", runs });
                     else if (tag === "h2") blocks.push({ type: "h2", runs });
@@ -489,16 +516,14 @@ export default function BookPreview({
                     else if (tag === "hr") blocks.push({ type: "hr" });
                     else if (tag === "p" || tag === "div") blocks.push({ type: "p", runs, indent: true });
                     else {
-                        // fallback: treat as paragraph
                         if (runs.length) blocks.push({ type: "p", runs });
                     }
                 }
                 return blocks;
             };
 
-            // Merge adjacent text runs
-            const mergeRuns = (runs: TextRun[]): TextRun[] => {
-                const merged: TextRun[] = [];
+            const mergeRuns = (runs: TextRunType[]): TextRunType[] => {
+                const merged: TextRunType[] = [];
                 for (const r of runs) {
                     const last = merged[merged.length - 1];
                     if (last && last.bold === r.bold && last.italic === r.italic) {
@@ -510,170 +535,533 @@ export default function BookPreview({
                 return merged;
             };
 
-            // ── Render blocks to PDF ──
-            const renderRuns = (runs: TextRun[], x: number, maxWidth: number, fontSize: number, lineH: number, firstLineIndent?: number) => {
-                runs = mergeRuns(runs);
-                let lineX = x;
-                let lineStartX = x;
-                let isFirstLine = true;
-                let textBuf = "";
+            // ── CHAPTER PAGE CALCULATOR (Dry Run Pass) ──
+            // We pre-render the chapters in a temporary PDF to discover starting page numbers.
+            const mockPdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+            mockPdf.addPage(); // page 2
+            mockPdf.addPage(); // page 3
+            mockPdf.addPage(); // page 4
+            const chapterStartPages: number[] = [];
+            
+            const renderChapters = async (targetPdf: typeof pdf, startPage: number, isDryRun: boolean) => {
+                let y = marginTop;
+                let pageNum = startPage;
+                const openerPages = new Set<number>();
 
-                const flushLine = () => {
-                    if (!textBuf) return;
-                    needSpace(lineH);
-                    pdf.text(textBuf, lineStartX, y);
-                    y += lineH;
-                    textBuf = "";
-                    lineStartX = x;
-                    isFirstLine = false;
+                const addPage = () => {
+                    pageNum++;
+                    targetPdf.addPage();
+                    
+                    if (!isDryRun) {
+                        // Centered footer page number
+                        targetPdf.setFont("times", "normal");
+                        targetPdf.setFontSize(9);
+                        targetPdf.setTextColor(140);
+                        targetPdf.text(String(pageNum), W / 2, H - 12, { align: "center" });
+
+                        // Running headers (alternating left/right)
+                        // Suppressed on chapter start pages!
+                        if (!openerPages.has(pageNum)) {
+                            const isEven = pageNum % 2 === 0;
+                            const headerText = isEven ? bookTitle : currentChapterTitle;
+                            
+                            targetPdf.setFont("times", "italic");
+                            targetPdf.setFontSize(8.5);
+                            targetPdf.setTextColor(140);
+                            targetPdf.text(headerText, W / 2, marginTop - 10, { align: "center" });
+                            
+                            targetPdf.setDrawColor(225);
+                            targetPdf.setLineWidth(0.25);
+                            targetPdf.line(marginLeft, marginTop - 7, W - marginRight, marginTop - 7);
+                        }
+                        
+                        // Reset text color to black for subsequent body text
+                        targetPdf.setTextColor(0);
+                    }
+                    y = marginTop;
                 };
 
-                for (const run of runs) {
-                    pdf.setFont("helvetica", run.bold ? "bold" : run.italic ? "italic" : "normal");
-                    pdf.setFontSize(fontSize);
+                const needSpace = (mm: number) => {
+                    if (y + mm > H - marginBottom) {
+                        addPage();
+                        return true;
+                    }
+                    return false;
+                };
 
-                    const words = run.text.split(/(\s+)/);
-                    for (const word of words) {
-                        if (word === "\n") {
-                            flushLine();
+                const renderRuns = (
+                    runs: TextRunType[], 
+                    x: number, 
+                    maxWidth: number, 
+                    fontSize: number, 
+                    lineH: number, 
+                    firstLineIndent?: number,
+                    isDropCapParagraph?: boolean
+                ) => {
+                    runs = mergeRuns(runs);
+                    let lineStartX = x;
+                    let textBuf = "";
+                    let currentStyle = "normal"; // Local variable to track current run style
+                    let lineCount = 0;
+
+                    // 1. Pre-calculate drop cap dimensions and strip the first letter from runs
+                    let capW = 0;
+                    let firstLetter = "";
+                    let processedRuns = runs.map(r => ({ ...r }));
+
+                    if (isDropCapParagraph && processedRuns.length > 0) {
+                        // Find the first non-empty text run and its first non-whitespace character
+                        for (let i = 0; i < processedRuns.length; i++) {
+                            const text = processedRuns[i].text;
+                            const trimmedIdx = text.search(/\S/);
+                            if (trimmedIdx !== -1) {
+                                firstLetter = text.charAt(trimmedIdx);
+                                processedRuns[i].text = text.slice(0, trimmedIdx) + text.slice(trimmedIdx + 1);
+                                
+                                if (!isDryRun) {
+                                    targetPdf.setFont("times", "bold");
+                                    targetPdf.setFontSize(22);
+                                    capW = targetPdf.getTextWidth(firstLetter) + 1.5;
+                                } else {
+                                    // Times-Roman bold at 22pt capital letters are approx 5.5mm wide
+                                    capW = 5.5;
+                                }
+                                break;
+                            }
+                        }
+                    }
+
+                    // 2. Draw the drop cap once at the starting position
+                    if (capW > 0 && !isDryRun) {
+                        targetPdf.setFont("times", "bold");
+                        targetPdf.setFontSize(22);
+                        targetPdf.setTextColor(180, 83, 9); // Gold/amber drop cap color
+                        targetPdf.text(firstLetter, x, y + 4.5); // Drop cap baseline alignment
+                        
+                        targetPdf.setFont("times", "normal");
+                        targetPdf.setFontSize(fontSize);
+                        targetPdf.setTextColor(0);
+                    }
+
+                    // 3. Set up indentation for drop cap or first line indent
+                    if (capW > 0) {
+                        lineStartX = x + capW;
+                    } else if (firstLineIndent) {
+                        lineStartX = x + firstLineIndent;
+                    }
+
+                    const flushLine = () => {
+                        if (!textBuf) return;
+                        const pageChanged = needSpace(lineH);
+                        if (!isDryRun) {
+                            if (pageChanged) {
+                                // Restore font and style if a page break happened
+                                targetPdf.setFont("times", currentStyle);
+                                targetPdf.setFontSize(fontSize);
+                                targetPdf.setTextColor(0);
+                            }
+                            targetPdf.text(textBuf, lineStartX, y);
+                        }
+                        y += lineH;
+                        textBuf = "";
+                        lineCount++;
+                        
+                        // Set start X for the next line
+                        if (capW > 0 && lineCount < 2) {
+                            lineStartX = x + capW; // Indent the first 2 lines for the drop cap
+                        } else {
+                            lineStartX = x;
+                        }
+                    };
+
+                    // Ensure color is reset to black at start of runs
+                    if (!isDryRun) {
+                        targetPdf.setTextColor(0);
+                    }
+
+                    for (const run of processedRuns) {
+                        currentStyle = run.bold ? "bold" : run.italic ? "italic" : "normal"; // Track current style
+                        if (!isDryRun) {
+                            targetPdf.setFont("times", currentStyle);
+                            targetPdf.setFontSize(fontSize);
+                        }
+
+                        const words = run.text.split(/(\s+)/);
+                        for (const word of words) {
+                            if (word === "\n") {
+                                flushLine();
+                                continue;
+                            }
+                            if (!word) continue;
+
+                            const wordW = targetPdf.getTextWidth(word);
+                            const currentLineIndent = lineStartX - x;
+                            const available = maxWidth - currentLineIndent - (textBuf ? targetPdf.getTextWidth(textBuf) : 0);
+
+                            if (wordW > available && textBuf) {
+                                flushLine();
+                            }
+
+                            textBuf += word;
+                        }
+                    }
+                    flushLine();
+                };
+
+                let currentChapterTitle = "";
+
+                for (let ci = 0; ci < chapterContents.length; ci++) {
+                    const ch = chapterContents[ci];
+                    currentChapterTitle = ch.title;
+
+                    // Start chapters on a fresh page (except the first)
+                    if (ci > 0) {
+                        addPage();
+                    }
+                    
+                    chapterStartPages[ci] = pageNum;
+                    
+                    // Mark current page as chapter start to suppress running header
+                    openerPages.add(pageNum);
+
+                    // 1. Centered Chapter Header at 1/3 down the page
+                    y = marginTop + 15;
+
+                    if (!isDryRun) {
+                        // Roman numerals
+                        targetPdf.setFont("times", "bold");
+                        targetPdf.setFontSize(10.5);
+                        targetPdf.setTextColor(140);
+                        targetPdf.text(`K A P I T E L   ${ci + 1}`, W / 2, y, { align: "center" });
+                        y += 8;
+
+                        // Gold ornament flourish (drawn as premium vector diamond rule to support standard PDF encoding)
+                        targetPdf.setFillColor(180, 83, 9);
+                        targetPdf.setDrawColor(180, 83, 9);
+                        targetPdf.setLineWidth(0.3);
+                        const cx = W / 2;
+                        const cy = y;
+                        const r = 0.85; // diamond radius
+                        targetPdf.triangle(cx, cy - r, cx + r, cy, cx, cy + r, "F");
+                        targetPdf.triangle(cx, cy - r, cx - r, cy, cx, cy + r, "F");
+                        targetPdf.line(cx - 15, cy, cx - r - 1.5, cy);
+                        targetPdf.line(cx + r + 1.5, cy, cx + 15, cy);
+                        y += 8;
+
+                        // Clean Chapter Title without "Kapitel X:" prefix if it exists
+                        const cleanTitle = ch.title.replace(/^Kapitel\s+\d+:\s*/i, "").trim();
+                        targetPdf.setFont("times", "bold");
+                        targetPdf.setFontSize(18);
+                        targetPdf.setTextColor(30);
+                        const titleLines = targetPdf.splitTextToSize(cleanTitle, contentW - 20);
+                        targetPdf.text(titleLines, W / 2, y, { align: "center" });
+                        y += titleLines.length * 8 + 15; // Gap before text starts
+                    } else {
+                        const cleanTitle = ch.title.replace(/^Kapitel\s+\d+:\s*/i, "").trim();
+                        const titleLines = targetPdf.splitTextToSize(cleanTitle, contentW - 20);
+                        y += 8 + 10 + titleLines.length * 8 + 15;
+                    }
+
+                    // Reset color to black
+                    if (!isDryRun) {
+                        targetPdf.setTextColor(0);
+                    }
+
+                    // 2. Render Chapter Blocks on the same page!
+                    const blocks = parseHtml(ch.html);
+                    
+                    // Skip the first block if it is a heading and matches the chapter title to avoid duplicate title rendering
+                    let startBlockIdx = 0;
+                    if (blocks.length > 0 && (blocks[0].type === "h1" || blocks[0].type === "h2" || blocks[0].type === "h3")) {
+                        startBlockIdx = 1;
+                    }
+
+                    for (let bi = startBlockIdx; bi < blocks.length; bi++) {
+                        const block = blocks[bi];
+
+                        if (block.type === "img") {
+                            const imgData = imageCache.get(block.src);
+                            if (imgData) {
+                                const aspect = imgData.width / imgData.height;
+                                let imgW = contentW;
+                                let imgH = imgW / aspect;
+
+                                if (imgH > 75) {
+                                    imgH = 75;
+                                    imgW = imgH * aspect;
+                                }
+
+                                needSpace(imgH + 5);
+
+                                if (!isDryRun) {
+                                    const xOffset = marginLeft + (contentW - imgW) / 2;
+                                    const ext = imgData.dataUrl.includes("image/png") ? "PNG" : "JPEG";
+                                    try {
+                                        targetPdf.addImage(imgData.dataUrl, ext, xOffset, y, imgW, imgH);
+                                    } catch (e) {
+                                        console.error("Failed to add image to PDF:", e);
+                                    }
+                                }
+                                y += imgH + 5;
+                            }
                             continue;
                         }
-                        if (!word) continue;
 
-                        const wordW = pdf.getTextWidth(word);
-                        const indent = isFirstLine && firstLineIndent ? firstLineIndent : 0;
-                        const available = maxWidth - indent - (textBuf ? pdf.getTextWidth(textBuf) : 0);
-
-                        if (wordW > available && textBuf) {
-                            flushLine();
+                        if (block.type === "hr") {
+                            needSpace(10);
+                            y += 3;
+                            if (!isDryRun) {
+                                targetPdf.setFillColor(180, 83, 9);
+                                targetPdf.setDrawColor(180, 83, 9);
+                                targetPdf.setLineWidth(0.3);
+                                const cx = W / 2;
+                                const cy = y;
+                                const r = 0.85;
+                                targetPdf.triangle(cx, cy - r, cx + r, cy, cx, cy + r, "F");
+                                targetPdf.triangle(cx, cy - r, cx - r, cy, cx, cy + r, "F");
+                                targetPdf.line(cx - 15, cy, cx - r - 1.5, cy);
+                                targetPdf.line(cx + r + 1.5, cy, cx + 15, cy);
+                            }
+                            y += 7;
+                            continue;
                         }
 
-                        if (isFirstLine && firstLineIndent && !textBuf) {
-                            lineStartX = x + firstLineIndent;
+                        if (block.type === "h1" || block.type === "h2" || block.type === "h3") {
+                            const sizes = { h1: 15, h2: 13, h3: 11 };
+                            const sz = sizes[block.type];
+                            needSpace(sz / 2.2 + bodyLeading);
+                            y += sz / 4;
+                            if (!isDryRun) {
+                                targetPdf.setFont("times", "bold");
+                                targetPdf.setFontSize(sz);
+                                targetPdf.setTextColor(30);
+                            }
+                            const text = block.runs.map(r => r.text).join("");
+                            const splitLines = targetPdf.splitTextToSize(text, contentW);
+                            for (const line of splitLines) {
+                                needSpace(sz / 2.2);
+                                if (!isDryRun) {
+                                    targetPdf.text(line, marginLeft, y);
+                                }
+                                y += sz / 2.2;
+                            }
+                            if (!isDryRun) {
+                                targetPdf.setTextColor(0);
+                            }
+                            y += 4;
+                            continue;
                         }
 
-                        textBuf += word;
+                        if (block.type === "quote") {
+                            const quoteX = marginLeft + 6;
+                            const quoteW = contentW - 12;
+                            needSpace(bodyLeading);
+                            if (!isDryRun) {
+                                targetPdf.setDrawColor(180, 83, 9);
+                                targetPdf.setLineWidth(0.5);
+                                targetPdf.line(marginLeft + 2, y - 3, marginLeft + 2, y + 5);
+                            }
+                            renderRuns(block.runs, quoteX, quoteW, bodySize - 1, bodyLeading);
+                            y += 3;
+                            continue;
+                        }
+
+                        if (block.type === "li") {
+                            const bullet = block.ordered ? `${block.index}. ` : "•  ";
+                            const liX = marginLeft + 6;
+                            if (!isDryRun) {
+                                targetPdf.setFont("times", "normal");
+                                targetPdf.setFontSize(bodySize);
+                                targetPdf.text(bullet, marginLeft, y);
+                            }
+                            renderRuns(block.runs, liX, contentW - 6, bodySize, bodyLeading);
+                            y += 1;
+                            continue;
+                        }
+
+                        // Paragraph rendering
+                        const isFirstParagraph = bi === 0 && block.type === "p";
+                        const doIndent = block.type === "p" && block.indent && !isFirstParagraph;
+                        renderRuns(
+                            block.runs, 
+                            marginLeft, 
+                            contentW, 
+                            bodySize, 
+                            bodyLeading, 
+                            doIndent ? indentFirstLine : undefined,
+                            isFirstParagraph
+                        );
+                        y += paraSpacing;
                     }
                 }
-                flushLine();
+                return pageNum;
             };
 
-            for (let ci = 0; ci < chapterContents.length; ci++) {
-                const ch = chapterContents[ci];
+            // Run dry pass first to discover exact chapter pages starting at page 4
+            await renderChapters(mockPdf, 4, true);
 
-                // Chapter title page
-                addPage();
-                y = H / 2 - 20;
+            // ── REAL PDF PASS ──
+            let realPageNum = 1;
+            
+            const addRealPage = () => {
+                if (realPageNum > 1) pdf.addPage();
+                realPageNum++;
+            };
 
-                // Chapter number
-                pdf.setFontSize(12);
-                pdf.setFont("helvetica", "bold");
-                pdf.setTextColor(130);
-                pdf.text(`KAPITEL ${toRomanNumerals(ci + 1)}`, W / 2, y, { align: "center" });
-                y += 12;
+            // 1. Cover Page
+            addRealPage();
+            
+            let coverImgData: string | null = null;
+            if (coverUrl) {
+                try {
+                    const resp = await fetch(coverUrl);
+                    const blob = await resp.blob();
+                    const reader = new FileReader();
+                    coverImgData = await new Promise<string>((resolve, reject) => {
+                        reader.onload = () => resolve(reader.result as string);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(blob);
+                    });
+                } catch { /* skip */ }
+            }
 
-                // Decorative line
-                pdf.setDrawColor(180);
-                pdf.setLineWidth(0.3);
-                pdf.line(W / 2 - 15, y, W / 2 + 15, y);
-                y += 10;
+            if (coverImgData) {
+                try {
+                    const img = new Image();
+                    img.src = coverImgData;
+                    await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; });
+                    const imgAspect = img.width / img.height;
+                    const imgW = contentW;
+                    const imgH = imgW / imgAspect;
+                    const imgY = (H - imgH) / 2;
+                    const ext = coverImgData.includes("image/png") ? "PNG" : "JPEG";
+                    pdf.addImage(coverImgData, ext, marginLeft, imgY, imgW, imgH);
 
-                // Title
-                pdf.setFontSize(22);
-                pdf.setFont("helvetica", "bold");
-                pdf.setTextColor(30);
-                const titleLines = pdf.splitTextToSize(ch.title, contentW - 20);
-                pdf.text(titleLines, W / 2, y, { align: "center" });
-                y += titleLines.length * 9 + 15;
-
-                // Bottom decorative line
-                pdf.setDrawColor(180);
-                pdf.line(W / 2 - 15, y, W / 2 + 15, y);
-
-                // Content page
-                addPage();
-                pdf.setTextColor(0);
-
-                // Header
-                pdf.setFontSize(9);
-                pdf.setFont("helvetica", "italic");
-                pdf.setTextColor(130);
-                pdf.text(`Kapitel ${ci + 1}`, marginLeft, y);
-                pdf.setTextColor(0);
-                y += 3;
-                pdf.setDrawColor(200);
-                pdf.setLineWidth(0.2);
-                pdf.line(marginLeft, y, W - marginRight, y);
-                y += 6;
-
-                // Drop cap for first paragraph
-                const blocks = parseHtml(ch.html);
-
-                for (let bi = 0; bi < blocks.length; bi++) {
-                    const block = blocks[bi];
-
-                    if (block.type === "hr") {
-                        needSpace(8);
-                        y += 2;
-                        pdf.setFontSize(14);
-                        pdf.setTextColor(180, 83, 9);
-                        pdf.text("❦", W / 2, y, { align: "center" });
-                        pdf.setTextColor(0);
-                        y += 6;
-                        continue;
+                    if (!hideCoverText) {
+                        pdf.setDrawColor(255);
+                        pdf.setFillColor(255, 255, 255);
+                        pdf.rect(marginLeft, imgY + imgH - 30, imgW, 30, "F");
+                        pdf.setFontSize(24);
+                        pdf.setFont("times", "bold");
+                        pdf.text(bookTitle, W / 2, imgY + imgH - 18, { align: "center" });
+                        pdf.setFontSize(13);
+                        pdf.setFont("times", "italic");
+                        pdf.text(author, W / 2, imgY + imgH - 8, { align: "center" });
                     }
-
-                    if (block.type === "h1" || block.type === "h2" || block.type === "h3") {
-                        const sizes = { h1: 16, h2: 14, h3: 12 };
-                        const sz = sizes[block.type];
-                        needSpace(sz / 2.5 + paraSpacing + bodyLeading);
-                        y += sz / 5;
-                        pdf.setFontSize(sz);
-                        const text = block.runs.map(r => r.text).join("");
-                        pdf.splitTextToSize(text, contentW).forEach((line: string) => {
-                            needSpace(sz / 2.5);
-                            pdf.text(line, marginLeft, y);
-                            y += sz / 2.5;
-                        });
-                        y += paraSpacing;
-                        continue;
-                    }
-
-                    if (block.type === "quote") {
-                        const quoteX = marginLeft + 5;
-                        const quoteW = contentW - 10;
-                        pdf.setDrawColor(180, 83, 9);
-                        pdf.setLineWidth(0.6);
-                        needSpace(bodyLeading);
-                        pdf.line(marginLeft + 1.5, y - 3, marginLeft + 1.5, y + 5);
-                        pdf.setFontSize(bodySize - 1);
-                        pdf.setTextColor(80);
-                        renderRuns(block.runs, quoteX, quoteW, bodySize - 1, bodyLeading);
-                        pdf.setTextColor(0);
-                        y += paraSpacing;
-                        continue;
-                    }
-
-                    if (block.type === "li") {
-                        const bullet = block.ordered ? `${block.index}. ` : "•  ";
-                        const liX = marginLeft + 6;
-                        pdf.setFontSize(bodySize);
-                        pdf.setFont("helvetica", "normal");
-                        pdf.text(bullet, marginLeft, y);
-                        renderRuns(block.runs, liX, contentW - 6, bodySize, bodyLeading);
-                        y += 1;
-                        continue;
-                    }
-
-                    // Paragraph
-                    const isFirstParagraph = bi === 0 && block.type === "p";
-                    const doIndent = block.type === "p" && block.indent && !isFirstParagraph;
-                    renderRuns(block.runs, marginLeft, contentW, bodySize, bodyLeading, doIndent ? indentFirstLine : undefined);
-                    y += paraSpacing;
+                } catch {
+                    coverImgData = null;
                 }
             }
 
-            // Save
+            if (!coverImgData) {
+                // Fine press clean layout text-only cover
+                pdf.setFontSize(30);
+                pdf.setFont("times", "bold");
+                const titleLines = pdf.splitTextToSize(bookTitle, contentW - 20);
+                const titleBlockH = titleLines.length * 12;
+                const coverY = (H - titleBlockH) / 2 - 15;
+                pdf.text(titleLines, W / 2, coverY, { align: "center" });
+
+                pdf.setDrawColor(180, 83, 9); // Gold accent line
+                pdf.setLineWidth(0.4);
+                const lineY = coverY + titleBlockH + 6;
+                pdf.line(W / 2 - 20, lineY, W / 2 + 20, lineY);
+
+                pdf.setFontSize(14);
+                pdf.setFont("times", "italic");
+                pdf.setTextColor(80);
+                pdf.text(author, W / 2, lineY + 12, { align: "center" });
+                pdf.setTextColor(0);
+            }
+
+            // 2. Copyright / Imprint Page (Impressum) on page 2
+            addRealPage();
+            let copyrightY = H / 2 - 40;
+            pdf.setFont("times", "bold");
+            pdf.setFontSize(14);
+            pdf.text(bookTitle, marginLeft, copyrightY);
+            copyrightY += 10;
+            
+            pdf.setFont("times", "normal");
+            pdf.setFontSize(9.5);
+            pdf.setTextColor(80);
+            const copyrightLines = [
+                `© ${new Date().getFullYear()} ${author}. Alle Rechte vorbehalten.`,
+                "",
+                "Dieses Werk, einschließlich aller seiner Teile, ist urheberrechtlich geschützt.",
+                "Jede Verwertung außerhalb der engen Grenzen des Urheberrechtsgesetzes ist",
+                "ohne schriftliche Zustimmung des Autors unzulässig und strafbar.",
+                "",
+                "Erstellt und gesetzt in der AI-Bucherstellung App.",
+                `Projekt-ID: ${bookId}`,
+                `Sprache: ${language === "de" ? "Deutsch" : "Englisch"}`
+            ];
+            for (const line of copyrightLines) {
+                pdf.text(line, marginLeft, copyrightY);
+                copyrightY += 6;
+            }
+            pdf.setTextColor(0);
+
+            // 3. Table of Contents Page (Inhaltsverzeichnis) on page 3
+            addRealPage();
+            let tocy = marginTop + 15;
+            pdf.setFont("times", "bold");
+            pdf.setFontSize(18);
+            pdf.text("Inhaltsverzeichnis", W / 2, tocy, { align: "center" });
+            tocy += 10;
+            pdf.setDrawColor(180, 83, 9);
+            pdf.setLineWidth(0.3);
+            pdf.line(W / 2 - 15, tocy, W / 2 + 15, tocy);
+            tocy += 18;
+
+            pdf.setFont("times", "normal");
+            pdf.setFontSize(10.5);
+            pdf.setTextColor(0, 0, 0);
+            
+            for (let ci = 0; ci < chapterContents.length; ci++) {
+                const ch = chapterContents[ci];
+                const pageStr = String(chapterStartPages[ci] || 4);
+                const titleText = `Kapitel ${ci + 1}: ${ch.title}`;
+                
+                const pageW = pdf.getTextWidth(pageStr);
+                const titleW = pdf.getTextWidth(titleText);
+                
+                const dotsSpace = contentW - titleW - pageW - 4;
+                let dots = "";
+                if (dotsSpace > 0) {
+                    const dotW = pdf.getTextWidth(".");
+                    const numDots = Math.floor(dotsSpace / dotW);
+                    dots = ".".repeat(numDots);
+                }
+
+                pdf.setTextColor(0, 0, 0);
+                pdf.text(titleText, marginLeft, tocy);
+                pdf.text(pageStr, W - marginRight - pageW, tocy);
+
+                // Draw dots
+                if (dots) {
+                    pdf.setTextColor(150, 150, 150);
+                    pdf.text(dots, marginLeft + titleW + 2, tocy);
+                    pdf.setTextColor(0, 0, 0);
+                }
+                
+                tocy += 8.5;
+            }
+
+            // 4. Render Chapters (Page 4 onwards)
+            pdf.addPage(); // Push Chapter 1 opener page to page 4, resolving the Table of Contents overlap bug!
+            await renderChapters(pdf, 4, false);
+
+            // ── Add Clickable Table of Contents Links (After all pages are fully created) ──
+            pdf.setPage(3); // Switch back to Page 3
+            let toclinkY = marginTop + 15 + 10 + 18;
+            for (let ci = 0; ci < chapterContents.length; ci++) {
+                const targetPage = chapterStartPages[ci] || 4;
+                pdf.link(marginLeft, toclinkY - 4.5, contentW, 6, { pageNumber: targetPage });
+                toclinkY += 8.5;
+            }
+
+            // Save PDF
             const fileName = `${slugify(bookTitle)}.pdf`;
             pdf.save(fileName);
         } catch (error) {
@@ -683,6 +1071,7 @@ export default function BookPreview({
         }
     };
 
+    // State-of-the-art EPUB Export
     const exportToEpub = async () => {
         if (isExporting || isExportingEpub || chapters.length === 0) return;
 
@@ -788,6 +1177,23 @@ export default function BookPreview({
                     }
                 }
 
+                // Skip the first heading block in EPUB to avoid duplicate title rendering
+                const firstHeading = doc.querySelector("h1, h2, h3");
+                if (firstHeading && firstHeading === doc.body.firstElementChild) {
+                    firstHeading.remove();
+                }
+
+                // Wrap first letter in a professional drop-cap span!
+                const firstP = doc.querySelector("p");
+                if (firstP && firstP.textContent) {
+                    const text = firstP.innerHTML.trim();
+                    if (text && !text.startsWith("<")) {
+                        const firstChar = text.charAt(0);
+                        const rest = text.slice(1);
+                        firstP.innerHTML = `<span class="drop-cap">${firstChar}</span>${rest}`;
+                    }
+                }
+
                 const voidElements = new Set([
                     "area",
                     "base",
@@ -859,62 +1265,93 @@ export default function BookPreview({
                 throw new Error("Failed to initialize EPUB folder.");
             }
 
+            // High-fidelity serif ePUB stylesheet
             const epubStyles = `
 body {
     font-family: "Georgia", "Times New Roman", serif;
-    line-height: 1.6;
+    line-height: 1.65;
     margin: 0;
-    padding: 1.5rem;
+    padding: 2rem;
     color: #111111;
+    background-color: #ffffff;
 }
 
 h1, h2, h3, h4 {
     font-weight: 700;
-    margin: 1.2em 0 0.6em;
+    margin: 1.8em 0 0.8em;
+    font-family: "Georgia", serif;
+    text-align: center;
 }
 
 p {
-    margin: 0 0 1em;
-    text-indent: 1.5em;
+    margin: 0 0 0.85em; /* Spacious, elegant vertical margins for modern block paragraphs */
+    text-indent: 0; /* Remove indents completely to match PDF block paragraphs */
+    text-align: justify;
+    line-height: 1.75;
 }
 
-p:first-of-type {
+p:first-of-type, h1 + p, h2 + p, h3 + p, blockquote + p {
     text-indent: 0;
+}
+
+.drop-cap {
+    float: left;
+    font-size: 3.2em;
+    line-height: 0.82;
+    padding-top: 4px;
+    padding-right: 6px;
+    font-weight: bold;
+    color: #b45309;
 }
 
 img {
     max-width: 100%;
     height: auto;
+    display: block;
+    margin: 1.5em auto;
 }
 
 blockquote {
-    margin: 1em 2em;
-    padding-left: 1em;
-    border-left: 2px solid #999999;
-    color: #555555;
+    margin: 1.5em 2em;
+    padding-left: 1.2em;
+    border-left: 3px solid #b45309;
+    color: #444444;
+    font-style: italic;
+}
+
+hr {
+    border: none;
+    height: 1px;
+    background: linear-gradient(to right, transparent, #b45309 30%, #b45309 70%, transparent);
+    width: 35%;
+    margin: 2.5em auto;
 }
 
 .cover {
     text-align: center;
+    padding: 0;
 }
 
 .cover-image img {
     display: block;
     max-width: 100%;
+    max-height: 90vh;
     margin: 0 auto;
 }
 
 .cover-text {
-    margin-top: 2rem;
+    margin-top: 3rem;
 }
 
 .cover-text h1 {
     margin: 0 0 0.5rem;
+    font-size: 2.2em;
 }
 
 .cover-text p {
     margin: 0;
     text-indent: 0;
+    font-style: italic;
 }
 `;
 
@@ -1120,7 +1557,7 @@ blockquote {
         }
     };
 
-    // DOCX Export function
+    // State-of-the-art DOCX Export with Georgia fonts and clean layout spacing
     const exportToDocx = async () => {
         if (isExporting || isExportingEpub || isExportingDocx || chapters.length === 0) return;
 
@@ -1151,13 +1588,97 @@ blockquote {
                 })
             );
 
-            // Helper function to parse HTML and convert to docx paragraphs
+            const docxImageCache = new Map<string, { data: ArrayBuffer; width: number; height: number; type: "png" | "jpg" | "gif" }>();
+
+            const loadDocxImage = async (src: string): Promise<{ data: ArrayBuffer; width: number; height: number; type: "png" | "jpg" | "gif" } | null> => {
+                try {
+                    let blob: Blob;
+                    let mime = "image/png";
+                    let type: "png" | "jpg" | "gif" = "png";
+
+                    if (src.startsWith("data:")) {
+                        const parts = src.split(",");
+                        mime = parts[0].match(/:(.*?);/)?.[1] || "image/png";
+                        const bstr = atob(parts[1]);
+                        let n = bstr.length;
+                        const u8arr = new Uint8Array(n);
+                        while (n--) {
+                            u8arr[n] = bstr.charCodeAt(n);
+                        }
+                        blob = new Blob([u8arr], { type: mime });
+                    } else {
+                        const resolved = resolveUrl(src);
+                        const response = await fetch(resolved);
+                        if (!response.ok) return null;
+                        blob = await response.blob();
+                        mime = blob.type || response.headers.get("content-type") || "image/png";
+                    }
+
+                    if (mime.includes("jpeg") || mime.includes("jpg")) {
+                        type = "jpg";
+                    } else if (mime.includes("gif")) {
+                        type = "gif";
+                    } else {
+                        type = "png";
+                    }
+
+                    const arrayBuffer = await blob.arrayBuffer();
+
+                    return new Promise((resolve) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            resolve({
+                                data: arrayBuffer,
+                                width: img.naturalWidth,
+                                height: img.naturalHeight,
+                                type
+                            });
+                        };
+                        img.onerror = () => {
+                            resolve({
+                                data: arrayBuffer,
+                                width: 300,
+                                height: 200,
+                                type
+                            });
+                        };
+                        const url = URL.createObjectURL(blob);
+                        img.src = url;
+                        img.addEventListener("load", () => URL.revokeObjectURL(url));
+                        img.addEventListener("error", () => URL.revokeObjectURL(url));
+                    });
+                } catch (e) {
+                    console.error("Failed to load image for DOCX:", e);
+                    return null;
+                }
+            };
+
+            // Preload all images in the book for DOCX
+            const allDocxSrcs = new Set<string>();
+            for (const ch of chapterEntries) {
+                const tmp = document.createElement("div");
+                tmp.innerHTML = ch.content || "";
+                const images = Array.from(tmp.querySelectorAll("img"));
+                for (const img of images) {
+                    const src = img.getAttribute("src");
+                    if (src) allDocxSrcs.add(src);
+                }
+            }
+
+            await Promise.all(
+                Array.from(allDocxSrcs).map(async (src) => {
+                    const data = await loadDocxImage(src);
+                    if (data) {
+                        docxImageCache.set(src, data);
+                    }
+                })
+            );
+
+            // HTML parser and converter to docx structures
             const htmlToParagraphs = (html: string): Paragraph[] => {
                 if (!html || html.trim() === "") return [];
 
                 const paragraphs: Paragraph[] = [];
-
-                // Parse HTML
                 const tempDiv = document.createElement("div");
                 tempDiv.innerHTML = html;
 
@@ -1167,26 +1688,24 @@ blockquote {
                     if (node.nodeType === Node.TEXT_NODE) {
                         const text = node.textContent || "";
                         if (text.trim()) {
-                            runs.push(new TextRun({ text }));
+                            runs.push(new TextRun({ text, font: "Georgia" }));
                         }
                     } else if (node.nodeType === Node.ELEMENT_NODE) {
                         const element = node as HTMLElement;
                         const tagName = element.tagName.toLowerCase();
 
-                        // Handle different elements
                         if (tagName === "strong" || tagName === "b") {
                             const childText = element.textContent || "";
-                            runs.push(new TextRun({ text: childText, bold: true }));
+                            runs.push(new TextRun({ text: childText, bold: true, font: "Georgia" }));
                         } else if (tagName === "em" || tagName === "i") {
                             const childText = element.textContent || "";
-                            runs.push(new TextRun({ text: childText, italics: true }));
+                            runs.push(new TextRun({ text: childText, italics: true, font: "Georgia" }));
                         } else if (tagName === "u") {
                             const childText = element.textContent || "";
-                            runs.push(new TextRun({ text: childText, underline: {} }));
+                            runs.push(new TextRun({ text: childText, underline: {}, font: "Georgia" }));
                         } else if (tagName === "br") {
                             runs.push(new TextRun({ text: "", break: 1 }));
                         } else {
-                            // Process child nodes
                             for (const child of Array.from(node.childNodes)) {
                                 runs.push(...processNode(child));
                             }
@@ -1196,25 +1715,63 @@ blockquote {
                     return runs;
                 };
 
+                let isFirstParagraph = true;
+
                 const processElement = (element: Element) => {
                     const tagName = element.tagName.toLowerCase();
+
+                    // Check if this element or any of its descendants is an image
+                    const imgEl = tagName === "img" ? element : element.querySelector("img");
+                    if (imgEl) {
+                        const src = imgEl.getAttribute("src") || "";
+                        const imgData = docxImageCache.get(src);
+                        if (imgData) {
+                            const aspect = imgData.width / imgData.height;
+                            let w = imgData.width;
+                            let h = imgData.height;
+                            if (w > 450) {
+                                w = 450;
+                                h = w / aspect;
+                            }
+                            if (h > 300) {
+                                h = 300;
+                                w = h * aspect;
+                            }
+
+                            paragraphs.push(new Paragraph({
+                                alignment: AlignmentType.CENTER,
+                                children: [
+                                    new ImageRun({
+                                        data: imgData.data,
+                                        transformation: {
+                                            width: w,
+                                            height: h
+                                        },
+                                        type: imgData.type
+                                    })
+                                ],
+                                spacing: { before: 200, after: 200 }
+                            }));
+                            return;
+                        }
+                    }
 
                     if (tagName === "h1") {
                         paragraphs.push(new Paragraph({
                             heading: HeadingLevel.HEADING_1,
-                            children: [new TextRun({ text: element.textContent || "", bold: true })],
+                            children: [new TextRun({ text: element.textContent || "", bold: true, font: "Georgia" })],
                             spacing: { before: 400, after: 200 },
                         }));
                     } else if (tagName === "h2") {
                         paragraphs.push(new Paragraph({
                             heading: HeadingLevel.HEADING_2,
-                            children: [new TextRun({ text: element.textContent || "", bold: true })],
+                            children: [new TextRun({ text: element.textContent || "", bold: true, font: "Georgia" })],
                             spacing: { before: 300, after: 150 },
                         }));
                     } else if (tagName === "h3") {
                         paragraphs.push(new Paragraph({
                             heading: HeadingLevel.HEADING_3,
-                            children: [new TextRun({ text: element.textContent || "", bold: true })],
+                            children: [new TextRun({ text: element.textContent || "", bold: true, font: "Georgia" })],
                             spacing: { before: 200, after: 100 },
                         }));
                     } else if (tagName === "p") {
@@ -1222,13 +1779,15 @@ blockquote {
                         if (runs.length > 0) {
                             paragraphs.push(new Paragraph({
                                 children: runs,
-                                spacing: { after: 200 },
-                                indent: { firstLine: 720 }, // 0.5 inch indent
+                                spacing: { line: 360, after: 0 }, // 1.5 line spacing, 0 margins
+                                // Suppress indentation on the very first paragraph of the chapter!
+                                indent: isFirstParagraph ? undefined : { firstLine: 720 },
                             }));
+                            isFirstParagraph = false;
                         }
                     } else if (tagName === "blockquote") {
                         paragraphs.push(new Paragraph({
-                            children: [new TextRun({ text: element.textContent || "", italics: true })],
+                            children: [new TextRun({ text: element.textContent || "", italics: true, font: "Georgia" })],
                             spacing: { before: 200, after: 200 },
                             indent: { left: 720, right: 720 },
                         }));
@@ -1237,32 +1796,29 @@ blockquote {
                         listItems.forEach((li, index) => {
                             const prefix = tagName === "ol" ? `${index + 1}. ` : "• ";
                             paragraphs.push(new Paragraph({
-                                children: [new TextRun({ text: prefix + (li.textContent || "") })],
+                                children: [new TextRun({ text: prefix + (li.textContent || ""), font: "Georgia" })],
                                 indent: { left: 720 },
                                 spacing: { after: 100 },
                             }));
                         });
                     } else {
-                        // For other elements, try to get text content
                         const text = element.textContent?.trim();
                         if (text) {
                             paragraphs.push(new Paragraph({
-                                children: [new TextRun({ text })],
+                                children: [new TextRun({ text, font: "Georgia" })],
                                 spacing: { after: 200 },
                             }));
                         }
                     }
                 };
 
-                // Process all top-level elements
                 for (const child of Array.from(tempDiv.children)) {
                     processElement(child);
                 }
 
-                // If no block elements found, wrap text in paragraph
                 if (paragraphs.length === 0 && tempDiv.textContent?.trim()) {
                     paragraphs.push(new Paragraph({
-                        children: [new TextRun({ text: tempDiv.textContent })],
+                        children: [new TextRun({ text: tempDiv.textContent, font: "Georgia" })],
                         spacing: { after: 200 },
                     }));
                 }
@@ -1270,10 +1826,9 @@ blockquote {
                 return paragraphs;
             };
 
-            // Build document sections
             const children: Paragraph[] = [];
 
-            // Title page
+            // Modern minimalist deluxe Title Page
             children.push(
                 new Paragraph({
                     alignment: AlignmentType.CENTER,
@@ -1282,18 +1837,20 @@ blockquote {
                         new TextRun({
                             text: bookTitle,
                             bold: true,
-                            size: 72, // 36pt
+                            size: 64, // 32pt
+                            font: "Georgia",
                         }),
                     ],
                 }),
                 new Paragraph({
                     alignment: AlignmentType.CENTER,
-                    spacing: { before: 400 },
+                    spacing: { before: 600 },
                     children: [
                         new TextRun({
                             text: author,
-                            size: 32, // 16pt
+                            size: 28, // 14pt
                             italics: true,
+                            font: "Georgia",
                         }),
                     ],
                 }),
@@ -1306,16 +1863,17 @@ blockquote {
             for (let i = 0; i < chapterEntries.length; i++) {
                 const chapter = chapterEntries[i];
 
-                // Chapter title
                 children.push(
                     new Paragraph({
                         heading: HeadingLevel.HEADING_1,
                         alignment: AlignmentType.CENTER,
-                        spacing: { before: 600, after: 400 },
+                        spacing: { before: 600, after: 200 },
                         children: [
                             new TextRun({
                                 text: `Kapitel ${i + 1}`,
-                                size: 28, // 14pt
+                                size: 24, // 12pt
+                                font: "Georgia",
+                                bold: true,
                             }),
                         ],
                     }),
@@ -1328,16 +1886,15 @@ blockquote {
                                 text: chapter.title,
                                 bold: true,
                                 size: 36, // 18pt
+                                font: "Georgia",
                             }),
                         ],
                     })
                 );
 
-                // Chapter content
                 const contentParagraphs = htmlToParagraphs(chapter.content || "");
                 children.push(...contentParagraphs);
 
-                // Page break after each chapter (except last)
                 if (i < chapterEntries.length - 1) {
                     children.push(new Paragraph({
                         children: [new PageBreak()],
@@ -1345,7 +1902,7 @@ blockquote {
                 }
             }
 
-            // Create document
+            // Create document with default styles set globally
             const doc = new Document({
                 creator: author,
                 title: bookTitle,
@@ -1358,7 +1915,6 @@ blockquote {
                 ],
             });
 
-            // Generate and download
             const blob = await Packer.toBlob(doc);
             const fileName = `${slugify(bookTitle)}.docx`;
             const url = URL.createObjectURL(blob);
@@ -1380,27 +1936,53 @@ blockquote {
     return (
         <div
             className={cn(
-                "relative flex flex-col items-center justify-center bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-900 dark:to-stone-800 rounded-xl p-8",
+                "relative flex flex-col items-center justify-center bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-900 dark:to-stone-800 rounded-xl p-8 transition-all duration-300",
                 isFullscreen && "fixed inset-0 z-50 rounded-none",
                 className
             )}
         >
-            {/* Top-right buttons */}
+            {/* Top-right controls */}
             <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
                 {onClose && (
                     <Button
                         variant="secondary"
                         size="sm"
                         onClick={onClose}
-                        className="gap-1.5"
+                        className="gap-1.5 h-9"
                     >
                         <X className="h-4 w-4" />
                         Schließen
                     </Button>
                 )}
+
+                {/* View Mode Toggle (only visible on wide desktops) */}
+                <div className="hidden lg:flex items-center bg-stone-200/60 dark:bg-stone-850/60 rounded-lg p-0.5 border border-stone-300/40 dark:border-stone-700/40 mr-1 select-none">
+                    <Button
+                        variant={viewMode === "single" ? "secondary" : "ghost"}
+                        size="sm"
+                        className="px-3.5 h-8 text-[11px] font-semibold gap-1.5 cursor-pointer rounded-md transition-all"
+                        onClick={() => setViewMode("single")}
+                        disabled={currentPageData?.type === "cover"}
+                    >
+                        <FileText className="h-3.5 w-3.5" />
+                        Einzelseite
+                    </Button>
+                    <Button
+                        variant={viewMode === "book" ? "secondary" : "ghost"}
+                        size="sm"
+                        className="px-3.5 h-8 text-[11px] font-semibold gap-1.5 cursor-pointer rounded-md transition-all"
+                        onClick={() => setViewMode("book")}
+                        disabled={currentPageData?.type === "cover"}
+                    >
+                        <Book className="h-3.5 w-3.5" />
+                        Buchansicht
+                    </Button>
+                </div>
+
                 <Button
                     variant="ghost"
                     size="icon"
+                    className="h-9 w-9"
                     onClick={() => setIsFullscreen(!isFullscreen)}
                 >
                     {isFullscreen ? (
@@ -1411,13 +1993,13 @@ blockquote {
                 </Button>
             </div>
 
-            {/* Export Dropdown */}
-            <div className="absolute top-4 right-14 z-10 flex items-center gap-2">
+            {/* Export Dropdown Menu */}
+            <div className="absolute top-4 right-14 lg:right-72 z-10 flex items-center gap-2">
                 <DropdownMenu>
                     <DropdownMenuTrigger
                         className={cn(
-                            "inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium",
-                            "bg-primary text-primary-foreground shadow-md hover:bg-primary/90",
+                            "inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium h-9",
+                            "bg-primary text-primary-foreground shadow-md hover:bg-primary/90 cursor-pointer",
                             "transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
                             "disabled:pointer-events-none disabled:opacity-50"
                         )}
@@ -1431,16 +2013,16 @@ blockquote {
                         Export
                         <ChevronDown className="h-4 w-4 opacity-70" />
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" sideOffset={4}>
-                        <DropdownMenuItem onClick={exportToPdf}>
+                    <DropdownMenuContent align="end" sideOffset={4} className="z-[60]">
+                        <DropdownMenuItem onClick={exportToPdf} className="cursor-pointer">
                             <Download className="h-4 w-4 mr-2" />
                             PDF (A4)
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={exportToEpub}>
+                        <DropdownMenuItem onClick={exportToEpub} className="cursor-pointer">
                             <Book className="h-4 w-4 mr-2" />
                             EPUB
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={exportToDocx}>
+                        <DropdownMenuItem onClick={exportToDocx} className="cursor-pointer">
                             <FileText className="h-4 w-4 mr-2" />
                             DOCX
                         </DropdownMenuItem>
@@ -1448,80 +2030,99 @@ blockquote {
                 </DropdownMenu>
             </div>
 
-            {/* Book */}
+            {/* Book Box Container */}
             <div
                 ref={bookRef}
                 className={cn(
-                    "relative bg-white dark:bg-stone-950 shadow-2xl transition-all duration-300",
-                    "border border-stone-300 dark:border-stone-700",
-                    isFullscreen
-                        ? "w-[700px] h-[900px]"
-                        : "w-[500px] h-[650px]",
-                    isExporting && "pdf-export-mode"
+                    "relative bg-white dark:bg-stone-950 shadow-2xl transition-all duration-300 select-none",
+                    "border border-stone-300 dark:border-stone-700 rounded-xl",
+                    isExporting && "pdf-export-mode",
+                    // Dynamically double the width when double-page view is active and we are not on the cover
+                    viewMode === "book" && currentPageData?.type !== "cover"
+                        ? (isFullscreen ? "w-[1300px] h-[850px]" : "w-[960px] h-[640px]")
+                        : (isFullscreen ? "w-[650px] h-[850px]" : "w-[480px] h-[640px]")
                 )}
                 style={{
                     boxShadow: isFullscreen
-                        ? '0 0 0 1px rgba(0,0,0,0.05), 0 20px 50px -10px rgba(0,0,0,0.3)'
-                        : '0 0 0 1px rgba(0,0,0,0.05), -1px 3px 6px -1px rgba(0,0,0,0.1), 0 10px 40px -5px rgba(0,0,0,0.25)',
+                        ? '0 0 0 1px rgba(0,0,0,0.05), 0 25px 60px -10px rgba(0,0,0,0.35)'
+                        : '0 0 0 1px rgba(0,0,0,0.05), -1px 3px 6px -1px rgba(0,0,0,0.1), 0 12px 45px -5px rgba(0,0,0,0.28)',
                 }}
             >
-                {/* Paper Texture Overlay - hide for cover */}
-                {currentPageData?.type !== "cover" && (
-                    <div className="absolute inset-0 pointer-events-none z-[1] opacity-[0.4] mix-blend-multiply paper-texture rounded-[inherit]" />
-                )}
-
-                {/* Decorative book spine - hide for cover */}
-                {currentPageData?.type !== "cover" && (
+                {/* 3D Page Stack layers behind the book for tactile realism */}
+                {currentPageData?.type !== "cover" && viewMode === "book" && (
                     <>
-                        <div className="absolute left-0 top-0 bottom-0 w-4 bg-gradient-to-r from-stone-300 via-stone-100 to-stone-50 dark:from-stone-800 dark:via-stone-700 dark:to-stone-900 z-[2] rounded-l-[inherit]" style={{ boxShadow: 'inset -1px 0 2px rgba(0,0,0,0.1)' }} />
-                        <div className="absolute left-4 top-0 bottom-0 w-[1px] bg-black/5 z-[2]" />
+                        <div className="absolute inset-0 top-[2px] bottom-[2px] left-[2px] right-[2px] bg-white/80 dark:bg-stone-900/80 border border-stone-200 dark:border-stone-800 rounded-[inherit] shadow-md -z-10 translate-x-[3px] translate-y-[2px] pointer-events-none" />
+                        <div className="absolute inset-0 top-[4px] bottom-[4px] left-[4px] right-[4px] bg-white/60 dark:bg-stone-950/60 border border-stone-300 dark:border-stone-900 rounded-[inherit] shadow-sm -z-20 translate-x-[6px] translate-y-[4px] pointer-events-none" />
                     </>
                 )}
 
-                {/* Cover page - edge-to-edge without spine offset */}
-                {currentPageData?.type === "cover" && (
+                {/* Paper texture overlay (hide for cover) */}
+                {currentPageData?.type !== "cover" && (
+                    <div className="absolute inset-0 pointer-events-none z-[5] opacity-[0.35] mix-blend-multiply paper-texture rounded-[inherit]" />
+                )}
+
+                {/* ── RENDERING VIEWS ── */}
+                {currentPageData?.type === "cover" ? (
+                    /* Cover view - single page */
                     <div className="absolute inset-0 overflow-hidden rounded-[inherit]">
                         <CoverPage title={currentPageData.title} author={author} coverUrl={coverUrl} hideCoverText={hideCoverText} />
                     </div>
-                )}
+                ) : (
+                    /* Content and chapter title views */
+                    <div className="w-full h-full relative">
+                        {viewMode === "book" ? (
+                            /* DOUBLE PAGE BOOK SPREAD */
+                            <div className="flex w-full h-full relative">
+                                {/* LEFT PAGE (Even page) */}
+                                <div className="flex-1 h-full relative overflow-hidden bg-[#fffdf8] dark:bg-[#1c1c1c] rounded-l-[inherit] border-r border-stone-200 dark:border-stone-800">
+                                    {isLoading ? (
+                                        <div className="h-full flex items-center justify-center">
+                                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                                        </div>
+                                    ) : (
+                                        renderPage(leftPageData, currentPage, false)
+                                    )}
 
-                {/* Page content - with spine offset for non-cover pages */}
-                {currentPageData?.type !== "cover" && (
-                    <div className="absolute inset-0 left-6 overflow-hidden bg-[#fffdf8] dark:bg-[#1a1a1a] rounded-r-[inherit]">
-                        {isLoading ? (
-                            <div className="h-full flex items-center justify-center">
-                                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                                    {/* spine shadow wrapping right edge */}
+                                    <div className="absolute top-0 right-0 bottom-0 w-8 pointer-events-none z-10 bg-gradient-to-r from-transparent to-black/[0.06] dark:to-black/[0.22]" />
+                                </div>
+
+                                {/* RIGHT PAGE (Odd page) */}
+                                <div className="flex-1 h-full relative overflow-hidden bg-[#fffdf8] dark:bg-[#1c1c1c] rounded-r-[inherit]">
+                                    {isLoading ? (
+                                        <div className="h-full flex items-center justify-center">
+                                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                                        </div>
+                                    ) : (
+                                        renderPage(rightPageData, currentPage + 1, true)
+                                    )}
+
+                                    {/* spine shadow wrapping left edge */}
+                                    <div className="absolute top-0 left-0 bottom-0 w-8 pointer-events-none z-10 bg-gradient-to-l from-transparent to-black/[0.06] dark:to-black/[0.22]" />
+                                </div>
+
+                                {/* Decorative book spine divider line */}
+                                <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-[1px] bg-black/10 dark:bg-white/5 z-20 pointer-events-none" />
                             </div>
-                        ) : null}
-
-                        {/* Chapter title view */}
-                        {currentPageData?.type === "title" && (
-                            <ChapterTitlePage
-                                chapterNumber={currentPageData.chapterNumber}
-                                title={currentPageData.title}
-                                isExporting={isExporting}
-                            />
+                        ) : (
+                            /* SINGLE PAGE SCROLL */
+                            <div className="absolute inset-0 left-6 overflow-hidden bg-[#fffdf8] dark:bg-[#1c1c1c] rounded-r-[inherit]">
+                                {isLoading ? (
+                                    <div className="h-full flex items-center justify-center">
+                                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                                    </div>
+                                ) : (
+                                    renderPage(leftPageData, currentPage, false)
+                                )}
+                                <div className="absolute left-0 top-0 bottom-0 w-4 bg-gradient-to-r from-stone-300 via-stone-100 to-stone-50 dark:from-stone-800 dark:via-stone-700 dark:to-stone-900 z-[6] rounded-l-[inherit]" style={{ boxShadow: 'inset -1px 0 2px rgba(0,0,0,0.1)' }} />
+                                <div className="absolute left-4 top-0 bottom-0 w-[1px] bg-black/5 z-[6]" />
+                            </div>
                         )}
-
-                        {currentPageData?.type === "content" && (
-                            <ContentPage
-                                content={currentPageData.content}
-                                chapterNumber={currentPageData.chapterNumber}
-                                pageNumber={currentPageData.contentPageIndex + 1}
-                            />
-                        )}
-                    </div>
-                )}
-
-                {/* Page number */}
-                {currentPageData?.type !== "cover" && (
-                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-xs text-stone-400 dark:text-stone-600 font-serif z-10">
-                        {currentPage}
                     </div>
                 )}
             </div>
 
-            {/* Navigation */}
+            {/* Navigation buttons */}
             <div className="flex items-center gap-4 mt-6">
                 <Button
                     variant="outline"
@@ -1532,8 +2133,12 @@ blockquote {
                     <ChevronLeft className="h-5 w-5" />
                 </Button>
 
-                <span className="text-sm text-muted-foreground min-w-[100px] text-center">
-                    Seite {currentPage + 1} von {allPages.length}
+                <span className="text-sm text-muted-foreground min-w-[120px] text-center font-serif">
+                    {viewMode === "single" || currentPage === 0 ? (
+                        `Seite ${currentPage + 1} von ${allPages.length}`
+                    ) : (
+                        `Seiten ${currentPage}–${Math.min(currentPage + 1, allPages.length - 1)} von ${allPages.length - 1}`
+                    )}
                 </span>
 
                 <Button
@@ -1546,20 +2151,20 @@ blockquote {
                 </Button>
             </div>
 
-            {/* Chapter list */}
+            {/* Chapter navigation dots */}
             <div className="flex gap-2 mt-4 flex-wrap justify-center max-w-lg">
                 {chapters.map((chapter, idx) => {
                     const chapterPageIndex = 1 + idx * 2;
-                    const isActive = currentPageData?.chapterId === chapter.id;
+                    const isActive = leftPageData?.chapterId === chapter.id || rightPageData?.chapterId === chapter.id;
 
                     return (
                         <button
                             key={chapter.id}
                             onClick={() => setCurrentPage(chapterPageIndex)}
                             className={cn(
-                                "px-3 py-1 text-xs rounded-full transition-colors",
+                                "px-3.5 py-1 text-xs rounded-full transition-colors cursor-pointer select-none font-serif",
                                 isActive
-                                    ? "bg-primary text-primary-foreground"
+                                    ? "bg-primary text-primary-foreground font-semibold shadow-sm"
                                     : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
                             )}
                         >
@@ -1570,6 +2175,213 @@ blockquote {
             </div>
         </div>
     );
+
+    // Dynamic page layout renderer
+    function renderPage(pageData: typeof allPages[0] | null, pageIndex: number, isRightPage: boolean) {
+        if (!pageData) {
+            return (
+                <div className="h-full w-full bg-[#fffdf8] dark:bg-[#1c1c1c] flex flex-col items-center justify-center p-12 select-none relative rounded-[inherit]">
+                    <div className="text-sm font-serif italic text-stone-300 dark:text-stone-700">Ende des Buches</div>
+                </div>
+            );
+        }
+
+        const showPageNumber = pageData.type === "content";
+        const runningHeader = pageData.type === "content" 
+            ? (isRightPage ? pageData.title : bookTitle)
+            : null;
+
+        return (
+            <div className="h-full w-full flex flex-col p-10 pt-6 pb-8 overflow-hidden select-none relative rounded-[inherit] bg-transparent">
+                {/* Running Header */}
+                {runningHeader && (
+                    <div className="flex justify-center items-center text-[10px] text-stone-400 dark:text-stone-500 font-serif tracking-[0.2em] uppercase mb-4 border-b border-stone-200/40 dark:border-stone-850/40 pb-2 z-10 select-none">
+                        {runningHeader}
+                    </div>
+                )}
+                {!runningHeader && <div className="h-[21px] mb-4" />}
+
+                {/* Page Content */}
+                <div className="flex-1 overflow-hidden select-text z-10">
+                    {pageData.type === "title" && (
+                        <ChapterTitlePage
+                            chapterNumber={pageData.chapterNumber}
+                            title={pageData.title}
+                            isExporting={isExporting}
+                        />
+                    )}
+                    {pageData.type === "content" && (
+                        <div
+                            className={cn(
+                                "flex-1 overflow-hidden book-content pb-8", 
+                                pageData.contentPageIndex === 0 && "has-drop-cap"
+                            )}
+                            dangerouslySetInnerHTML={{ __html: pageData.content }}
+                        />
+                    )}
+                </div>
+
+                {/* Centered Footers / Page Numbers */}
+                {showPageNumber && (
+                    <div className="text-[11px] text-stone-400 dark:text-stone-500 font-serif z-10 mt-auto pt-3 flex justify-center select-none">
+                        {pageIndex}
+                    </div>
+                )}
+                {!showPageNumber && <div className="h-4 mt-auto pt-3" />}
+
+                {/* Inject high-fidelity typography styles */}
+                <style jsx global>{`
+                    .book-content {
+                        font-family: var(--font-crimson-pro), "Georgia", "Times New Roman", serif;
+                        font-size: 14.5px;
+                        line-height: 1.85;
+                        color: #2d3748;
+                        text-align: justify;
+                        hyphens: auto;
+                        letter-spacing: 0.01em;
+                    }
+
+                    html.dark .book-content {
+                        color: #e2e8f0;
+                    }
+
+                    .book-content p {
+                        margin-bottom: 0.85em; /* Spacious, elegant vertical margin between block paragraphs */
+                        text-indent: 0; /* Remove indents completely for clean modern block paragraphs */
+                        text-align: justify;
+                    }
+
+                    /* Elite indentation rules */
+                    .book-content > p:first-of-type,
+                    .book-content h1 + p,
+                    .book-content h2 + p,
+                    .book-content h3 + p,
+                    .book-content hr + p,
+                    .book-content blockquote + p {
+                        text-indent: 0 !important;
+                    }
+
+                    /* State-of-the-art copper drop cap only on chapter starts */
+                    .book-content.has-drop-cap > p:first-of-type::first-letter {
+                        float: left;
+                        font-size: 3.6em;
+                        line-height: 0.82;
+                        padding-right: 0.08em;
+                        margin-top: 0.05em;
+                        font-weight: 700;
+                        color: #b45309;
+                        font-family: var(--font-crimson-pro), serif;
+                    }
+
+                    html.dark .book-content.has-drop-cap > p:first-of-type::first-letter {
+                        color: #f59e0b;
+                    }
+
+                    .book-content h1,
+                    .book-content h2,
+                    .book-content h3 {
+                        font-family: var(--font-crimson-pro), serif;
+                        font-weight: 700;
+                        margin-top: 1.2em;
+                        margin-bottom: 0.4em;
+                        text-indent: 0;
+                    }
+
+                    .book-content h1 { font-size: 1.6em; }
+                    .book-content h2 { font-size: 1.4em; }
+                    .book-content h3 { font-size: 1.2em; }
+
+                    .book-content blockquote {
+                        margin: 1.5em 2em;
+                        padding-left: 1.2em;
+                        border-left: 3px solid #b45309;
+                        font-style: italic;
+                        color: #5d6778;
+                    }
+
+                    html.dark .book-content blockquote {
+                        color: #9ca3af;
+                    }
+
+                    .book-content img {
+                        height: auto;
+                        border-radius: 3px;
+                        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+                    }
+                    
+                    .book-content img[class*="w-[30%]"] {
+                        float: right;
+                        clear: right;
+                        width: 30% !important;
+                        margin: 0.5em 0 0.8em 1.2em;
+                    }
+                    
+                    .book-content img[class*="w-[45%]"] {
+                        float: right;
+                        clear: right;
+                        width: 45% !important;
+                        margin: 0.5em 0 0.8em 1.2em;
+                    }
+                    
+                    .book-content img.block,
+                    .book-content img[class*="mx-auto"] {
+                        float: none !important;
+                        clear: both !important;
+                        display: block !important;
+                        width: 100%;
+                        margin: 1.2em auto !important;
+                    }
+                    
+                    .book-content img:not([class]) {
+                        max-width: 100%;
+                        height: auto;
+                        display: block;
+                        margin: 1.5em auto;
+                    }
+                    
+                    .book-content::after {
+                        content: "";
+                        display: table;
+                        clear: both;
+                    }
+                    
+                    .book-content img + p {
+                        text-indent: 0;
+                    }
+
+                    .book-content ul {
+                        margin: 1em 0;
+                        padding-left: 2em;
+                        text-indent: 0;
+                        list-style-type: disc;
+                    }
+
+                    .book-content ol {
+                        margin: 1em 0;
+                        padding-left: 2em;
+                        text-indent: 0;
+                        list-style-type: decimal;
+                    }
+
+                    .book-content li {
+                        margin-bottom: 0.5em;
+                    }
+
+                    .book-content hr {
+                        border: none;
+                        text-align: center;
+                        margin: 2em 0;
+                    }
+
+                    .book-content hr::before {
+                        content: "❦";
+                        font-size: 1.5em;
+                        color: #b45309;
+                    }
+                `}</style>
+            </div>
+        );
+    }
 }
 
 // Cover Page Component
@@ -1582,7 +2394,6 @@ function CoverPage({ title, author, coverUrl, hideCoverText }: { title: string; 
                     alt={title}
                     className="w-full h-full object-cover"
                 />
-                {/* Overlay with title - only show if not hidden */}
                 {!hideCoverText && (
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex flex-col justify-end p-8">
                         <h1 className="text-3xl font-serif font-bold text-white leading-tight mb-2 drop-shadow-lg">
@@ -1598,29 +2409,24 @@ function CoverPage({ title, author, coverUrl, hideCoverText }: { title: string; 
     }
 
     return (
-        <div className="h-full flex flex-col items-center justify-center p-12 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20">
-            {/* Decorative border */}
-            <div className="absolute inset-8 border-2 border-amber-300/50 dark:border-amber-700/30 rounded" />
-            <div className="absolute inset-10 border border-amber-200/50 dark:border-amber-800/20 rounded" />
+        <div className="h-full flex flex-col items-center justify-center p-12 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-stone-900 dark:to-stone-950 relative select-none">
+            {/* Elegant double-border */}
+            <div className="absolute inset-8 border-2 border-amber-300/40 dark:border-amber-700/25 rounded" />
+            <div className="absolute inset-10 border border-amber-200/30 dark:border-amber-800/15 rounded" />
 
-            {/* Ornament top */}
-            <div className="text-4xl text-amber-400/60 dark:text-amber-600/40 mb-8">❦</div>
+            <div className="text-4xl text-amber-500/50 dark:text-amber-600/30 mb-8 select-none">❦</div>
 
-            {/* Title */}
-            <h1 className="text-4xl font-serif font-bold text-center text-stone-800 dark:text-stone-200 leading-tight mb-6">
+            <h1 className="text-4xl font-serif font-bold text-center text-stone-850 dark:text-stone-150 leading-tight mb-6">
                 {title}
             </h1>
 
-            {/* Decorative line */}
             <div className="w-32 h-0.5 bg-gradient-to-r from-transparent via-amber-400 to-transparent mb-6" />
 
-            {/* Author */}
             <p className="text-lg font-serif italic text-stone-600 dark:text-stone-400">
                 {author}
             </p>
 
-            {/* Ornament bottom */}
-            <div className="text-4xl text-amber-400/60 dark:text-amber-600/40 mt-auto mb-8">❧</div>
+            <div className="text-4xl text-amber-500/50 dark:text-amber-600/30 mt-auto mb-8 select-none">❧</div>
         </div>
     );
 }
@@ -1639,342 +2445,45 @@ function ChapterTitlePage({
     const forcedTextStyle = isExporting ? { color: '#000000' } : {};
 
     return (
-        <div className="h-full flex flex-col items-center justify-center p-12 text-center chapter-title-page">
+        <div className="h-full flex flex-col items-center justify-center p-12 text-center select-none bg-transparent">
+            {/* Top vertical space offset */}
+            <div className="h-[15%] mb-4" />
+
             <div
-                className="mb-6 mx-auto w-16 border-t-2 border-stone-300 dark:border-stone-700 chapter-line"
+                className="mb-6 mx-auto w-16 border-t border-stone-300 dark:border-stone-800 chapter-line"
                 style={forcedStyle}
             />
 
-            {/* Chapter number */}
             <p
-                className="text-base font-bold uppercase tracking-[0.3em] text-stone-500 dark:text-stone-400 mb-8 font-serif chapter-number"
+                className="text-[11px] font-bold uppercase tracking-[0.3em] text-stone-400 dark:text-stone-500 mb-8 font-serif chapter-number"
                 style={forcedTextStyle}
             >
                 KAPITEL {toRomanNumerals(chapterNumber)}
             </p>
 
-            {/* Chapter title */}
             <h2
-                className="text-4xl font-serif font-bold text-stone-900 dark:text-stone-50 leading-tight mb-12 max-w-lg chapter-title"
+                className="text-3xl font-serif font-bold text-stone-850 dark:text-stone-100 leading-tight mb-12 max-w-lg chapter-title"
                 style={forcedTextStyle}
             >
                 {title}
             </h2>
 
-            {/* Decorative ornament */}
             <div
-                className="text-3xl text-stone-300 dark:text-stone-600 chapter-ornament"
+                className="text-2xl text-stone-300 dark:text-stone-700 chapter-ornament mb-6"
                 style={forcedTextStyle}
             >
                 ❦
             </div>
 
             <div
-                className="mt-6 mx-auto w-16 border-t-2 border-stone-300 dark:border-stone-700 chapter-line"
+                className="mx-auto w-16 border-t border-stone-300 dark:border-stone-800 chapter-line"
                 style={forcedStyle}
             />
         </div>
     );
 }
 
-// Content Page Component
-function ContentPage({
-    content,
-    chapterNumber,
-    pageNumber,
-}: {
-    content: string;
-    chapterNumber: number;
-    pageNumber: number;
-}) {
-    return (
-        <div className="h-full flex flex-col p-8 pt-4 overflow-hidden">
-            {/* Header - subtle chapter indicator */}
-            <div className="flex justify-between items-center text-xs text-stone-400 dark:text-stone-500 font-serif italic mb-3 border-b border-stone-200/50 dark:border-stone-700/50 pb-2">
-                <span className="tracking-wide">Kapitel {chapterNumber}</span>
-            </div>
-
-            {/* Content - optimized spacing for better page fill */}
-            <div
-                className="flex-1 overflow-hidden book-content pb-8"
-                dangerouslySetInnerHTML={{ __html: content }}
-            />
-
-            {/* Book styling for content */}
-            <style jsx global>{`
-                .book-content {
-                    font-family: var(--font-crimson-pro), "Georgia", "Times New Roman", serif;
-                    font-size: 15px;
-                    line-height: 1.85;
-                    color: #2d3748;
-                    text-align: justify;
-                    hyphens: auto;
-                    letter-spacing: 0.01em;
-                }
-
-                html.dark .book-content {
-                    color: #e2e8f0;
-                }
-
-                .book-content p {
-                    margin-bottom: 0.85em;
-                    text-indent: 1.5em;
-                    text-align: justify;
-                }
-
-                .book-content > p:first-of-type {
-                    text-indent: 0;
-                }
-
-                .book-content > p:first-of-type::first-letter {
-                    float: left;
-                    font-size: 3.5em;
-                    line-height: 0.85;
-                    padding-right: 0.08em;
-                    padding-top: 0.05em;
-                    font-weight: 600;
-                    color: #b45309;
-                    font-family: var(--font-crimson-pro), serif;
-                }
-
-                html.dark .book-content > p:first-of-type::first-letter {
-                    color: #f59e0b;
-                }
-
-                .book-content h1,
-                .book-content h2,
-                .book-content h3 {
-                    font-family: var(--font-crimson-pro), serif;
-                    font-weight: 700;
-                    margin-top: 0.5em; /* Reduced from 1.5em */
-                    margin-bottom: 0.5em;
-                    text-indent: 0;
-                }
-
-                .book-content h1 {
-                    font-size: 1.75em;
-                }
-
-                .book-content h2 {
-                    font-size: 1.5em;
-                }
-
-                .book-content h3 {
-                    font-size: 1.25em;
-                }
-
-                .book-content blockquote {
-                    margin: 1.5em 2em;
-                    padding-left: 1em;
-                    border-left: 3px solid #d97706;
-                    font-style: italic;
-                    color: #6b7280;
-                }
-
-                html.dark .book-content blockquote {
-                    color: #9ca3af;
-                    border-left-color: #d97706;
-                }
-
-                /* Professional book image styling */
-                .book-content img {
-                    height: auto;
-                    border-radius: 3px;
-                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-                }
-                
-                /* Small images - right float with text wrap (30%) */
-                .book-content img[class*="w-[30%]"],
-                .book-content img[class*="w-1/4"],
-                .book-content img[class*="max-w-[180px]"],
-                .book-content img[class*="max-w-[150px]"] {
-                    float: right;
-                    clear: right;
-                    width: 30% !important;
-                    max-width: none !important;
-                    margin: 0.5em 0 0.8em 1.2em;
-                    shape-outside: margin-box;
-                    shape-margin: 0.8em;
-                }
-                
-                /* Medium images - right float with text wrap (45%) */
-                .book-content img[class*="w-[45%]"],
-                .book-content img[class*="w-1/2"],
-                .book-content img[class*="max-w-[280px]"],
-                .book-content img[class*="max-w-[300px]"] {
-                    float: right;
-                    clear: right;
-                    width: 45% !important;
-                    max-width: none !important;
-                    margin: 0.5em 0 0.8em 1.2em;
-                    shape-outside: margin-box;
-                    shape-margin: 1em;
-                }
-                
-                /* Large/full-width images - centered, no float */
-                .book-content img.block,
-                .book-content img[class*="mx-auto"],
-                .book-content img[class*="clear-both"],
-                .book-content img[class*="max-w-full"],
-                .book-content img.full-width,
-                /* Treat images with just the default class as large */
-                .book-content img[class="rounded-lg h-auto shadow-md"] {
-                    float: none !important;
-                    clear: both !important;
-                    display: block !important;
-                    max-width: 100% !important;
-                    width: 100%;
-                    margin: 1.2em auto !important;
-                    shape-outside: none !important;
-                }
-                
-                /* Specific legacy alternating float ONLY for images that are NOT marked as large/default */
-                /* This effectively disables the auto-float for new images, ensuring control via classes */
-                .book-content img:not([class]) {
-                    max-width: 100%;
-                    height: auto;
-                    display: block;
-                    margin: 1.5em auto;
-                }
-                
-                /* Clearfix after floated content */
-                .book-content::after {
-                    content: "";
-                    display: table;
-                    clear: both;
-                }
-                
-                /* Paragraph after images should have no indent */
-                .book-content img + p,
-                .book-content p:has(img) + p {
-                    text-indent: 0;
-                }
-                
-                /* Responsive: smaller screens - stack images */
-                @media (max-width: 500px) {
-                    .book-content img {
-                        float: none !important;
-                        display: block !important;
-                        max-width: 100% !important;
-                        margin: 1em auto !important;
-                        shape-outside: none !important;
-                    }
-                }
-
-                /* Lists */
-                .book-content ul {
-                    margin: 1em 0;
-                    padding-left: 2em;
-                    text-indent: 0;
-                    list-style-type: disc;
-                }
-
-                .book-content ol {
-                    margin: 1em 0;
-                    padding-left: 2em;
-                    text-indent: 0;
-                    list-style-type: decimal;
-                }
-
-                .book-content li {
-                    margin-bottom: 0.5em;
-                }
-
-                /* Horizontal rule as decorative divider */
-                .book-content hr {
-                    border: none;
-                    text-align: center;
-                    margin: 2em 0;
-                }
-
-                .book-content hr::before {
-                    content: "❦";
-                    font-size: 1.5em;
-                    color: #d97706;
-                }
-                
-                /* PDF EXPORT OVERRIDES - FORCE PRINT STYLING */
-                .pdf-export-mode {
-                    background-color: #ffffff !important;
-                    color: #000000 !important;
-                    box-shadow: none !important;
-                    border: none !important;
-                    /* Increase bottom padding to prevent cutoff on A4 scaling */
-                    padding-bottom: 80px !important;
-                }
-                
-                .pdf-export-mode .book-content {
-                    color: #000000 !important;
-                }
-                
-                /* Force white background on all inner containers */
-                .pdf-export-mode > div,
-                .pdf-export-mode div,
-                .pdf-export-mode [class*="bg-"],
-                .pdf-export-mode .chapter-title-page,
-                .pdf-export-mode [class*="dark:bg-"] {
-                    background-color: #ffffff !important;
-                    background: #ffffff !important;
-                    background-image: none !important;
-                }
-                
-                /* Hide decorative elements in PDF */
-                .pdf-export-mode .paper-texture,
-                .pdf-export-mode [class*="from-stone"],
-                .pdf-export-mode [class*="via-stone"],
-                .pdf-export-mode [class*="to-stone"]:not(p):not(span):not(h1):not(h2):not(h3) {
-                    opacity: 0 !important;
-                    background: transparent !important;
-                }
-                
-                /* Reset header border for print */
-                .pdf-export-mode .border-b {
-                    border-color: #cccccc !important;
-                }
-                
-                /* Force ALL text to black, overriding Tailwind classes */
-                .pdf-export-mode h1,
-                .pdf-export-mode h2,
-                .pdf-export-mode h3,
-                .pdf-export-mode h4,
-                .pdf-export-mode h5,
-                .pdf-export-mode h6,
-                .pdf-export-mode p,
-                .pdf-export-mode span,
-                .pdf-export-mode div,
-                .pdf-export-mode [class*="text-stone-"] {
-                    color: #000000 !important;
-                    text-shadow: none !important;
-                    -webkit-text-fill-color: #000000 !important;
-                }
-                
-                .pdf-export-mode .book-content blockquote {
-                    color: #333333 !important;
-                    border-left-color: #000000 !important;
-                }
-                
-                /* Ensure image captions/shadows look good in print */
-                .pdf-export-mode img {
-                    box-shadow: none !important;
-                    border: 1px solid #eee !important;
-                }
-                
-                /* Specific overrides for Chapter Title Page in PDF */
-                .pdf-export-mode .chapter-title-page .chapter-title,
-                .pdf-export-mode .chapter-title-page .chapter-number,
-                .pdf-export-mode .chapter-title-page .chapter-ornament {
-                    color: #000000 !important;
-                }
-                
-                .pdf-export-mode .chapter-title-page .chapter-line {
-                    border-color: #000000 !important;
-                }
-            `}</style>
-        </div>
-    );
-}
-
-// Utility function to convert number to Roman numerals
+// Utility function to convert numbers to Roman numerals
 function toRomanNumerals(num: number): string {
     const romanNumerals: [number, string][] = [
         [1000, "M"],

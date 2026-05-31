@@ -34,7 +34,7 @@ import {
     ArrowRight,
     Wand2,
 } from "lucide-react";
-import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo, forwardRef, useImperativeHandle } from "react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -225,31 +225,40 @@ function Toolbar({ editor, onImageClick }: ToolbarProps) {
     );
 }
 
-export default function RichTextEditor({
-    content,
-    onChange,
-    placeholder = "Beginne mit dem Schreiben...",
-    className,
-    editorClassName,
-    bookId,
-    aiContext,
-}: RichTextEditorProps) {
-    const [showImageDialog, setShowImageDialog] = useState(false);
-    const [imageUrl, setImageUrl] = useState("");
-    const [imageSize, setImageSize] = useState<"large" | "medium" | "small">("large");
-    const [isUploading, setIsUploading] = useState(false);
-    const [uploadError, setUploadError] = useState<string | null>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    const [selectedImage, setSelectedImage] = useState<HTMLImageElement | null>(null);
-    const [imageToolbarPos, setImageToolbarPos] = useState<{ top: number; left: number } | null>(null);
-    const [, setSelectionUpdateTrigger] = useState(0); // Used to force re-render on selection change
+export interface RichTextEditorRef {
+    insertContent: (content: string) => void;
+    deleteRange: (range: { from: number; to: number }) => void;
+    getSelection: () => { from: number; to: number };
+    focus: () => void;
+    isFocused: () => boolean;
+}
 
-    // Inline AI states
-    const [isAILoading, setIsAILoading] = useState(false);
-    const [aiAction, setAiAction] = useState<string | null>(null);
-    const abortControllerRef = useRef<AbortController | null>(null);
-    const [aiMenuPos, setAiMenuPos] = useState<{ top: number; left: number } | null>(null);
-    const [hasSelection, setHasSelection] = useState(false);
+const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
+    function RichTextEditor({
+        content,
+        onChange,
+        placeholder = "Beginne mit dem Schreiben...",
+        className,
+        editorClassName,
+        bookId,
+        aiContext,
+    }, ref) {
+        const [showImageDialog, setShowImageDialog] = useState(false);
+        const [imageUrl, setImageUrl] = useState("");
+        const [imageSize, setImageSize] = useState<"large" | "medium" | "small">("large");
+        const [isUploading, setIsUploading] = useState(false);
+        const [uploadError, setUploadError] = useState<string | null>(null);
+        const fileInputRef = useRef<HTMLInputElement>(null);
+        const [selectedImage, setSelectedImage] = useState<HTMLImageElement | null>(null);
+        const [imageToolbarPos, setImageToolbarPos] = useState<{ top: number; left: number } | null>(null);
+        const [, setSelectionUpdateTrigger] = useState(0); // Used to force re-render on selection change
+
+        // Inline AI states
+        const [isAILoading, setIsAILoading] = useState(false);
+        const [aiAction, setAiAction] = useState<string | null>(null);
+        const abortControllerRef = useRef<AbortController | null>(null);
+        const [aiMenuPos, setAiMenuPos] = useState<{ top: number; left: number } | null>(null);
+        const [hasSelection, setHasSelection] = useState(false);
 
     // Get CSS class based on image size - professional book styling
     const getImageClass = (size: "large" | "medium" | "small") => {
@@ -457,6 +466,34 @@ export default function RichTextEditor({
             }
         },
     });
+
+    useImperativeHandle(ref, () => ({
+        insertContent: (htmlOrText: string) => {
+            if (editor) {
+                editor.chain().insertContent(htmlOrText).run();
+            }
+        },
+        deleteRange: (range: { from: number; to: number }) => {
+            if (editor) {
+                editor.chain().deleteRange(range).run();
+            }
+        },
+        getSelection: () => {
+            if (editor) {
+                const { from, to } = editor.state.selection;
+                return { from, to };
+            }
+            return { from: 0, to: 0 };
+        },
+        focus: () => {
+            if (editor) {
+                editor.commands.focus();
+            }
+        },
+        isFocused: () => {
+            return editor ? editor.isFocused : false;
+        }
+    }), [editor]);
 
     // Inline AI handler
     const handleInlineAI = useCallback(async (action: string) => {
@@ -919,7 +956,9 @@ export default function RichTextEditor({
             `}</style>
         </>
     );
-}
+});
+
+export default RichTextEditor;
 
 // Export text statistics utility
 export interface TextStatistics {

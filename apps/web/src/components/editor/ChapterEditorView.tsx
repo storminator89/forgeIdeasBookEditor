@@ -32,7 +32,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import RichTextEditor, { getTextStatistics } from "@/components/editor/RichTextEditor";
+import RichTextEditor, { getTextStatistics, type RichTextEditorRef } from "@/components/editor/RichTextEditor";
 import AdvancedAIPanel from "@/components/editor/AdvancedAIPanel";
 import { useI18n } from "@/components/locale-provider";
 import { cn } from "@/lib/utils";
@@ -132,6 +132,31 @@ type Props = {
   chapters: SimpleChapter[];
 };
 
+function htmlToPlainText(html: string): string {
+  let text = html;
+  
+  // Replace block closing tags and line breaks with newlines
+  text = text.replace(/<\/p>/g, "\n");
+  text = text.replace(/<br\s*\/?>/g, "\n");
+  text = text.replace(/<\/h[1-6]>/g, "\n");
+  text = text.replace(/<\/blockquote>/g, "\n");
+  text = text.replace(/<\/li>/g, "\n");
+  
+  // Strip all remaining HTML tags
+  text = text.replace(/<[^>]*>/g, "");
+  
+  // Decode common HTML entities
+  text = text
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ");
+    
+  return text;
+}
+
 export default function ChapterEditorView({
   chapter,
   allCharacters,
@@ -151,6 +176,10 @@ export default function ChapterEditorView({
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamedText, setStreamedText] = useState("");
   const abortControllerRef = useRef<AbortController | null>(null);
+  const editorRef = useRef<RichTextEditorRef>(null);
+  const streamStartPos = useRef<number | null>(null);
+  const lastInsertedLengthRef = useRef<number>(0);
+  const accumulatedTextRef = useRef<string>("");
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [showAIPanel, setShowAIPanel] = useState(false);
   const [aiPrompt, setAiPrompt] = useState("");
@@ -249,6 +278,28 @@ export default function ChapterEditorView({
     setGeneratedText("");
     setStreamedText("");
 
+    // Focus and prepare the editor
+    if (editorRef.current) {
+      if (!editorRef.current.isFocused()) {
+        editorRef.current.focus();
+      }
+
+      const selection = editorRef.current.getSelection();
+      // Simple text-only length check
+      const textLength = content.replace(/<[^>]*>/g, "").length;
+      
+      // If the editor has text and the cursor is near the end, insert a spacer first
+      if (content.trim() && selection.from >= textLength) {
+        editorRef.current.insertContent("<p><br></p>");
+      }
+
+      const updatedSelection = editorRef.current.getSelection();
+      streamStartPos.current = updatedSelection.from;
+    }
+
+    lastInsertedLengthRef.current = 0;
+    accumulatedTextRef.current = "";
+
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
 
@@ -290,7 +341,6 @@ export default function ChapterEditorView({
 
       const decoder = new TextDecoder();
       let buffer = "";
-      let accumulatedText = ""; // Track text locally for abort handling
 
       try {
         while (true) {
@@ -319,8 +369,15 @@ export default function ChapterEditorView({
               try {
                 const data = JSON.parse(dataStr);
 
-                // Check if this is a done event (final text)
+                // Check if this is a done event (final HTML text)
                 if (data.text !== undefined) {
+                  // Replace streamed plain text range with finalized, polished rich HTML
+                  if (editorRef.current && streamStartPos.current !== null) {
+                    const endPos = editorRef.current.getSelection().to;
+                    editorRef.current.deleteRange({ from: streamStartPos.current, to: endPos });
+                    editorRef.current.insertContent(data.text);
+                  }
+
                   setGeneratedText(data.text);
                   setStreamedText("");
                   setIsStreaming(false);
@@ -334,10 +391,18 @@ export default function ChapterEditorView({
                   continue;
                 }
 
-                // Token event
+                // Token event - Stream plain text to the editor dynamically
                 if (data.token) {
-                  accumulatedText += data.token;
-                  setStreamedText(accumulatedText);
+                  accumulatedTextRef.current += data.token;
+                  setStreamedText(accumulatedTextRef.current);
+
+                  const plainAccumulated = htmlToPlainText(accumulatedTextRef.current);
+                  const newText = plainAccumulated.slice(lastInsertedLengthRef.current);
+
+                  if (newText && editorRef.current) {
+                    editorRef.current.insertContent(newText);
+                    lastInsertedLengthRef.current = plainAccumulated.length;
+                  }
                 }
               } catch {
                 // Skip malformed JSON
@@ -346,17 +411,30 @@ export default function ChapterEditorView({
           }
         }
       } catch (streamError) {
-        // Handle stream reading errors
         console.error("Stream reading error:", streamError);
-        if (accumulatedText) {
-          setGeneratedText(accumulatedText);
+        if (accumulatedTextRef.current) {
+          setGeneratedText(accumulatedTextRef.current);
         }
       }
     } catch (error: unknown) {
       if (error instanceof Error && error.name === "AbortError") {
-        // User aborted - keep the streamed text as generated text
-        if (streamedText) {
-          setGeneratedText(streamedText);
+        // User aborted - keeping whatever is already streamed
+        if (accumulatedTextRef.current) {
+          if (editorRef.current && streamStartPos.current !== null) {
+            const endPos = editorRef.current.getSelection().to;
+            editorRef.current.deleteRange({ from: streamStartPos.current, to: endPos });
+            
+            let cleanText = accumulatedTextRef.current;
+            cleanText = cleanText.replace(/<[^>]*$/, ""); // remove trailing open tag
+            if (!/<\/?[a-z][\s\S]*>/i.test(cleanText)) {
+              cleanText = cleanText
+                .split(/\n\n+/)
+                .map((para: string) => `<p>${para.trim().replace(/\n/g, "<br>")}</p>`)
+                .join("");
+            }
+            editorRef.current.insertContent(cleanText);
+          }
+          setGeneratedText(t({ de: "Generierung abgebrochen. Text wurde beibehalten.", en: "Generation stopped. Text was kept." }));
         } else {
           setGeneratedText(t({ de: "Generierung abgebrochen", en: "Generation aborted" }));
         }
@@ -373,17 +451,6 @@ export default function ChapterEditorView({
 
   const handleAbortGeneration = () => {
     abortControllerRef.current?.abort();
-  };
-
-  const insertGeneratedText = () => {
-    if (generatedText) {
-      // Check if content already exists to add a break
-      const spacer = content.trim() ? "<p><br></p>" : "";
-      setContent(content + spacer + generatedText);
-      setGeneratedText("");
-      setAiPrompt("");
-      setShowAIPanel(false);
-    }
   };
 
   const handleAdvancedAIInsert = (text: string) => {
@@ -512,6 +579,7 @@ export default function ChapterEditorView({
             {/* Content Editor - TipTap Rich Text */}
             <div className="pl-4">
               <RichTextEditor
+                ref={editorRef}
                 content={content}
                 onChange={setContent}
                 placeholder={t({ de: "Beginne mit dem Schreiben...", en: "Start writing..." })}
@@ -879,22 +947,37 @@ export default function ChapterEditorView({
             </div>
 
             {/* Generated Text or Streaming Preview */}
-            {(generatedText || streamedText) && (
+            {isStreaming && streamedText && (
               <div className="space-y-2.5 pt-4 border-t border-border/30">
-                <label className="text-xs font-bold tracking-wider uppercase text-muted-foreground">
-                  {isStreaming
-                    ? t({ de: "Wird generiert...", en: "Generating..." })
-                    : t({ de: "Generierter Text", en: "Generated text" })}
+                <label className="text-xs font-bold tracking-wider uppercase text-muted-foreground animate-pulse">
+                  {t({ de: "KI schreibt in Editor...", en: "AI is writing to editor..." })}
                 </label>
-                <div className="p-4 rounded-xl border border-border/40 bg-secondary/25 text-xs font-serif leading-relaxed max-h-64 overflow-auto whitespace-pre-wrap shadow-inner">
-                  {isStreaming ? streamedText : generatedText}
-                  {isStreaming && <span className="inline-block w-2.5 h-4 ml-0.5 bg-primary animate-pulse" />}
+                <div className="p-4 rounded-xl border border-border/40 bg-secondary/25 text-xs font-serif leading-relaxed max-h-40 overflow-auto whitespace-pre-wrap shadow-inner text-muted-foreground">
+                  {streamedText}
+                  <span className="inline-block w-2.5 h-4 ml-0.5 bg-primary animate-pulse" />
                 </div>
-                {!isStreaming && generatedText && (
-                  <Button onClick={insertGeneratedText} variant="outline" className="w-full rounded-xl h-10 border-border/50 text-xs font-semibold hover:bg-secondary/45 transition-colors">
-                    {t({ de: "In Kapitel einfügen", en: "Insert into chapter" })}
-                  </Button>
-                )}
+              </div>
+            )}
+
+            {!isStreaming && generatedText && (
+              <div className="space-y-2.5 pt-4 border-t border-border/30 text-center p-4 bg-green-500/5 border border-green-500/25 rounded-xl animate-in fade-in duration-300">
+                <div className="mx-auto h-8 w-8 rounded-full bg-green-500/10 flex items-center justify-center mb-2">
+                  <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
+                </div>
+                <p className="text-xs font-semibold text-green-700 dark:text-green-400">
+                  {t({ de: "Text erfolgreich in den Editor geschrieben!", en: "Text successfully written to the editor!" })}
+                </p>
+                <Button
+                  onClick={() => {
+                    setGeneratedText("");
+                    setAiPrompt("");
+                  }}
+                  variant="ghost"
+                  size="sm"
+                  className="mt-2 text-[10px] h-7 font-semibold"
+                >
+                  {t({ de: "Bereit für neuen Prompt", en: "Ready for new prompt" })}
+                </Button>
               </div>
             )}
           </div>

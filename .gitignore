@@ -49,6 +49,9 @@ coverage
 tmp
 temp
 
+# User uploads
+apps/web/public/uploads
+
 # Databases
 local.db
 local.db-journal
