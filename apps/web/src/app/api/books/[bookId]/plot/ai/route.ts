@@ -1,5 +1,6 @@
 import prisma from "@bucherstellung/db";
 import { NextRequest, NextResponse } from "next/server";
+import { buildGenreInstructions } from "@/lib/ai/genre-prompts";
 
 type RouteContext = {
     params: Promise<{ bookId: string }>;
@@ -126,6 +127,8 @@ Antworte NUR mit einem JSON-Objekt:
 
 Wähle einen passenden Typ (type).
 Stelle sicher, dass der neue Punkt logisch in die Geschichte passt.
+
+${buildGenreInstructions(book.genre)}
 Sprache: Deutsch.`;
 
     const userPrompt = `Benutzer-Anweisung: "${prompt}"\nErstelle basierend darauf einen neuen Handlungspunkt.`;

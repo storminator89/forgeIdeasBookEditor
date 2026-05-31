@@ -1,6 +1,7 @@
 "use client";
 
 import { useEditor, EditorContent, Editor } from "@tiptap/react";
+import { BubbleMenu } from "@tiptap/extension-bubble-menu";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import Highlight from "@tiptap/extension-highlight";
@@ -28,6 +29,10 @@ import {
     Trash2,
     Maximize,
     Minimize,
+    Expand,
+    Shrink,
+    ArrowRight,
+    Wand2,
 } from "lucide-react";
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 
@@ -49,6 +54,8 @@ interface RichTextEditorProps {
     placeholder?: string;
     className?: string;
     editorClassName?: string;
+    bookId?: string;
+    aiContext?: string;
 }
 
 interface ToolbarButtonProps {
@@ -224,6 +231,8 @@ export default function RichTextEditor({
     placeholder = "Beginne mit dem Schreiben...",
     className,
     editorClassName,
+    bookId,
+    aiContext,
 }: RichTextEditorProps) {
     const [showImageDialog, setShowImageDialog] = useState(false);
     const [imageUrl, setImageUrl] = useState("");
@@ -234,6 +243,13 @@ export default function RichTextEditor({
     const [selectedImage, setSelectedImage] = useState<HTMLImageElement | null>(null);
     const [imageToolbarPos, setImageToolbarPos] = useState<{ top: number; left: number } | null>(null);
     const [, setSelectionUpdateTrigger] = useState(0); // Used to force re-render on selection change
+
+    // Inline AI states
+    const [isAILoading, setIsAILoading] = useState(false);
+    const [aiAction, setAiAction] = useState<string | null>(null);
+    const abortControllerRef = useRef<AbortController | null>(null);
+    const [aiMenuPos, setAiMenuPos] = useState<{ top: number; left: number } | null>(null);
+    const [hasSelection, setHasSelection] = useState(false);
 
     // Get CSS class based on image size - professional book styling
     const getImageClass = (size: "large" | "medium" | "small") => {
@@ -330,6 +346,7 @@ export default function RichTextEditor({
         document.addEventListener('click', handleImageClick);
         return () => document.removeEventListener('click', handleImageClick);
     }, [handleImageClick]);
+
     // Memoize extensions to prevent duplicate extension warnings
     const extensions = useMemo(() => [
         StarterKit.configure({
@@ -415,13 +432,130 @@ export default function RichTextEditor({
         },
         onSelectionUpdate: ({ editor }) => {
             // Force re-render to update toolbar active states
-            // We can do this by setting a state or using a ref, but mostly React detects changes if we pull state.
-            // Since Toolbar uses `editor.isActive(...)` and `editor` object reference is stable, 
-            // the Toolbar component might not re-render just because selection changed inside Tiptap.
-            // A simple trick is to trigger a state update.
             setSelectionUpdateTrigger(Date.now());
+
+            // Update AI menu position based on selection
+            if (bookId) {
+                const { from, to } = editor.state.selection;
+                const hasTextSelection = from !== to;
+                setHasSelection(hasTextSelection);
+
+                if (hasTextSelection) {
+                    // Get the position of the selection end
+                    const endCoords = editor.view.coordsAtPos(to);
+                    const editorRect = editor.view.dom.closest('.ProseMirror')?.getBoundingClientRect();
+
+                    if (editorRect && endCoords) {
+                        setAiMenuPos({
+                            top: endCoords.bottom - editorRect.top + 8,
+                            left: Math.max(0, endCoords.left - editorRect.left - 50),
+                        });
+                    }
+                } else {
+                    setAiMenuPos(null);
+                }
+            }
         },
     });
+
+    // Inline AI handler
+    const handleInlineAI = useCallback(async (action: string) => {
+        if (!editor || !bookId) return;
+
+        const { from, to } = editor.state.selection;
+        const selectedText = editor.state.doc.textBetween(from, to, "\n");
+
+        if (!selectedText && action !== "continue") return;
+
+        setIsAILoading(true);
+        setAiAction(action);
+
+        const abortController = new AbortController();
+        abortControllerRef.current = abortController;
+
+        try {
+            const response = await fetch(`/api/books/${bookId}/ai/inline`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action,
+                    text: selectedText,
+                    context: aiContext || editor.getHTML(),
+                }),
+                signal: abortController.signal,
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                console.error("AI error:", error.error);
+                return;
+            }
+
+            // Process SSE stream
+            const reader = response.body?.getReader();
+            if (!reader) return;
+
+            const decoder = new TextDecoder();
+            let buffer = "";
+            let resultText = "";
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split("\n");
+                buffer = lines.pop() || "";
+
+                for (const line of lines) {
+                    const trimmedLine = line.trim();
+                    if (!trimmedLine) continue;
+
+                    if (trimmedLine.startsWith("data: ")) {
+                        const dataStr = trimmedLine.slice(6);
+                        try {
+                            const data = JSON.parse(dataStr);
+
+                            if (data.text !== undefined) {
+                                resultText = data.text;
+                            } else if (data.token) {
+                                resultText += data.token;
+
+                                // For "continue", stream directly into editor
+                                if (action === "continue") {
+                                    editor.chain().focus().insertContent(data.token).run();
+                                }
+                                // For other actions, don't touch editor during streaming
+                                // The BubbleMenu shows the streamedText preview
+                            }
+                        } catch {
+                            // Skip malformed JSON
+                        }
+                    }
+                }
+            }
+
+            // For non-continue actions, replace the selection with the final text
+            if (action !== "continue" && resultText) {
+                editor.chain().focus().deleteRange({ from, to }).insertContent(resultText).run();
+            }
+        } catch (error: unknown) {
+            if (error instanceof Error && error.name === "AbortError") {
+                // User aborted
+            } else {
+                console.error("Inline AI error:", error);
+            }
+        } finally {
+            setIsAILoading(false);
+            setAiAction(null);
+            abortControllerRef.current = null;
+        }
+    }, [editor, bookId, aiContext]);
+
+    // Abort inline AI
+    const handleAbortAI = useCallback(() => {
+        abortControllerRef.current?.abort();
+    }, []);
 
     const handleFileUpload = useCallback(async (file: File) => {
         setIsUploading(true);
@@ -510,6 +644,86 @@ export default function RichTextEditor({
             <div className={cn("rounded-md border bg-background relative", className)}>
                 <Toolbar editor={editor} onImageClick={() => setShowImageDialog(true)} />
                 <EditorContent editor={editor} />
+
+                {/* Inline AI Floating Menu */}
+                {bookId && hasSelection && aiMenuPos && (
+                    <div
+                        className="ai-floating-menu absolute z-50 bg-background border rounded-lg shadow-lg p-1 flex items-center gap-1"
+                        style={{
+                            top: `${aiMenuPos.top}px`,
+                            left: `${aiMenuPos.left}px`,
+                        }}
+                    >
+                        {isAILoading ? (
+                            <div className="flex items-center gap-2 px-2 py-1">
+                                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                                <span className="text-sm text-muted-foreground">
+                                    {aiAction === "rewrite" && "Wird umgeschrieben..."}
+                                    {aiAction === "expand" && "Wird erweitert..."}
+                                    {aiAction === "shorten" && "Wird gekürzt..."}
+                                    {aiAction === "continue" && "Wird geschrieben..."}
+                                </span>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={handleAbortAI}
+                                    className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                                >
+                                    Stop
+                                </Button>
+                            </div>
+                        ) : (
+                            <>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleInlineAI("rewrite")}
+                                    className="h-8 px-2 text-xs"
+                                    title="Text umschreiben"
+                                >
+                                    <Wand2 className="h-3 w-3 mr-1" />
+                                    Umschreiben
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleInlineAI("expand")}
+                                    className="h-8 px-2 text-xs"
+                                    title="Text ausführlicher machen"
+                                >
+                                    <Expand className="h-3 w-3 mr-1" />
+                                    Ausführlicher
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleInlineAI("shorten")}
+                                    className="h-8 px-2 text-xs"
+                                    title="Text kürzen"
+                                >
+                                    <Shrink className="h-3 w-3 mr-1" />
+                                    Kürzen
+                                </Button>
+                                <div className="w-px h-6 bg-border mx-0.5" />
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleInlineAI("continue")}
+                                    className="h-8 px-2 text-xs"
+                                    title="Ab hier weiterschreiben"
+                                >
+                                    <ArrowRight className="h-3 w-3 mr-1" />
+                                    Weiter schreiben
+                                </Button>
+                            </>
+                        )}
+                    </div>
+                )}
 
                 {/* Floating Image Edit Toolbar */}
                 {selectedImage && imageToolbarPos && (

@@ -22,6 +22,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useI18n } from "@/components/locale-provider";
 
@@ -49,6 +50,7 @@ export default function ChapterTab({
     isCreating
 }: ChapterTabProps) {
     const { t, intlLocale } = useI18n();
+    const router = useRouter();
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -211,10 +213,8 @@ export default function ChapterTab({
                                                                 <MoreVertical className="h-4 w-4" />
                                                             </DropdownMenuTrigger>
                                                             <DropdownMenuContent align="end" className="w-40">
-                                                                <DropdownMenuItem asChild>
-                                                                    <Link href={`/books/${bookId}/chapter/${chapter.id}`}>
-                                                                        <Pencil className="mr-2 h-4 w-4" /> {t({ de: "Bearbeiten", en: "Edit" })}
-                                                                    </Link>
+                                                                <DropdownMenuItem onClick={() => router.push(`/books/${bookId}/chapter/${chapter.id}`)}>
+                                                                    <Pencil className="mr-2 h-4 w-4" /> {t({ de: "Bearbeiten", en: "Edit" })}
                                                                 </DropdownMenuItem>
                                                                 <DropdownMenuItem className="text-destructive focus:text-destructive">
                                                                     <Trash2 className="mr-2 h-4 w-4" /> {t({ de: "Löschen", en: "Delete" })}

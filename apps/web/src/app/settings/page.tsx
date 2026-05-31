@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { ArrowLeft, Loader2, Eye, EyeOff, Save, Sparkles, Check } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { ArrowLeft, Loader2, Eye, EyeOff, Save, Sparkles, Check, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import type { Route } from "next";
 
@@ -49,6 +49,31 @@ export default function SettingsPage() {
     const [maxTokens, setMaxTokens] = useState(4096);
     const [systemPrompt, setSystemPrompt] = useState("");
     const [showApiKey, setShowApiKey] = useState(false);
+    const [availableModels, setAvailableModels] = useState<string[]>([]);
+    const [isLoadingModels, setIsLoadingModels] = useState(false);
+    const [modelsError, setModelsError] = useState<string | null>(null);
+
+    const fetchModels = useCallback(async () => {
+        setIsLoadingModels(true);
+        setModelsError(null);
+        try {
+            const params = new URLSearchParams();
+            if (apiEndpoint) params.set("apiEndpoint", apiEndpoint);
+            if (apiKey) params.set("apiKey", apiKey);
+
+            const response = await fetch(`/api/settings/models?${params}`);
+            if (!response.ok) {
+                const data = await response.json().catch(() => null);
+                throw new Error(data?.error || "Failed to fetch models");
+            }
+            const data = await response.json();
+            setAvailableModels(data.models || []);
+        } catch (err) {
+            setModelsError(err instanceof Error ? err.message : t({ de: "Fehler beim Laden der Modelle", en: "Failed to load models" }));
+        } finally {
+            setIsLoadingModels(false);
+        }
+    }, [apiEndpoint, apiKey, t]);
 
     useEffect(() => {
         async function loadSettings() {
@@ -190,27 +215,62 @@ export default function SettingsPage() {
                                     {t({
                                         de: "? API-Schlüssel konfiguriert ({{key}}). Leer lassen, um den bestehenden beizubehalten.",
                                         en: "? API key configured ({{key}}). Leave empty to keep the existing one.",
-                                    }, { key: settings.apiKey })}
+                                    }, { key: settings.apiKey ?? "" })}
                                 </p>
                             )}
                         </div>
 
                         {/* Model Selection */}
                         <div className="space-y-2">
-                            <label className="text-sm font-medium">{t({ de: "Modell", en: "Model" })}</label>
-                            <select
-                                value={model}
-                                onChange={(e) => setModel(e.target.value)}
-                                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
-                            >
-                                {PRESET_MODELS.map((preset) => (
-                                    <option key={preset.value} value={preset.value}>
-                                        {preset.label}
-                                    </option>
-                                ))}
-                            </select>
+                            <div className="flex items-center justify-between">
+                                <label className="text-sm font-medium">{t({ de: "Modell", en: "Model" })}</label>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={fetchModels}
+                                    disabled={isLoadingModels || !apiEndpoint || (!apiKey && !settings?.hasApiKey)}
+                                >
+                                    {isLoadingModels ? (
+                                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                        <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                                    )}
+                                    {t({ de: "Modelle laden", en: "Load models" })}
+                                </Button>
+                            </div>
+                            {availableModels.length > 0 ? (
+                                <select
+                                    value={model}
+                                    onChange={(e) => setModel(e.target.value)}
+                                    className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                                >
+                                    {availableModels.map((m) => (
+                                        <option key={m} value={m}>
+                                            {m}
+                                        </option>
+                                    ))}
+                                </select>
+                            ) : (
+                                <select
+                                    value={model}
+                                    onChange={(e) => setModel(e.target.value)}
+                                    className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                                >
+                                    {PRESET_MODELS.map((preset) => (
+                                        <option key={preset.value} value={preset.value}>
+                                            {preset.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
+                            {modelsError && (
+                                <p className="text-xs text-destructive">{modelsError}</p>
+                            )}
                             <p className="text-xs text-muted-foreground">
-                                {t({ de: "Oder gib einen benutzerdefinierten Modellnamen ein:", en: "Or enter a custom model name:" })}
+                                {availableModels.length > 0
+                                    ? t({ de: "Oder gib einen benutzerdefinierten Modellnamen ein:", en: "Or enter a custom model name:" })
+                                    : t({ de: "Klicke auf \"Modelle laden\" um verfügbare Modelle vom Endpunkt zu laden, oder gib einen Modellnamen ein:", en: "Click \"Load models\" to fetch available models from the endpoint, or enter a model name:" })}
                             </p>
                             <Input
                                 value={model}

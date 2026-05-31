@@ -1,5 +1,6 @@
 import prisma from "@bucherstellung/db";
 import { NextRequest, NextResponse } from "next/server";
+import { buildGenreInstructions } from "@/lib/ai/genre-prompts";
 
 type RouteContext = {
     params: Promise<{ bookId: string }>;
@@ -237,6 +238,12 @@ Aktuelles Kapitel: ${currentChapterNum} von ${totalChapters}`;
     if (context.book.targetAudience) prompt += `\nZielgruppe: ${context.book.targetAudience}`;
     prompt += `\nSprache: ${context.book.language === "de" ? "Deutsch" : context.book.language}`;
 
+    // Genre-spezifische Anweisungen hinzufügen
+    const genreInstructions = buildGenreInstructions(context.book.genre);
+    if (genreInstructions) {
+        prompt += genreInstructions;
+    }
+
     if (context.characters.length > 0) {
         prompt += `\n\n## Charaktere`;
         for (const char of context.characters) {
@@ -381,21 +388,30 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         const systemPrompt = buildSystemPrompt(context, aiSettings.systemPrompt || undefined);
 
         // Call OpenAI-compatible API
+        const apiRequestBody: Record<string, unknown> = {
+            model: aiSettings.model,
+            messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: effectivePrompt },
+            ],
+            temperature: temperature ?? aiSettings.temperature,
+            max_tokens: calculatedMaxTokens,
+        };
+
+        // Check if streaming is requested
+        const wantsStream = body.stream === true;
+
+        if (wantsStream) {
+            apiRequestBody.stream = true;
+        }
+
         const response = await fetch(`${aiSettings.apiEndpoint}/chat/completions`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
                 Authorization: `Bearer ${aiSettings.apiKey}`,
             },
-            body: JSON.stringify({
-                model: aiSettings.model,
-                messages: [
-                    { role: "system", content: systemPrompt },
-                    { role: "user", content: effectivePrompt },
-                ],
-                temperature: temperature ?? aiSettings.temperature,
-                max_tokens: calculatedMaxTokens,
-            }),
+            body: JSON.stringify(apiRequestBody),
         });
 
         if (!response.ok) {
@@ -407,6 +423,100 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
             );
         }
 
+        // Handle streaming response
+        if (wantsStream && response.body) {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let fullText = "";
+
+            const stream = new ReadableStream({
+                async start(controller) {
+                    let buffer = "";
+
+                    try {
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+
+                            buffer += decoder.decode(value, { stream: true });
+                            const lines = buffer.split("\n");
+                            // Keep last incomplete line in buffer
+                            buffer = lines.pop() || "";
+
+                            for (const line of lines) {
+                                const trimmedLine = line.trim();
+                                if (!trimmedLine || !trimmedLine.startsWith("data: ")) continue;
+
+                                const data = trimmedLine.slice(6);
+                                if (data === "[DONE]") {
+                                    // Stream complete - clean up text and send final event
+                                    let cleanText = fullText;
+                                    cleanText = cleanText.replace(/^```html\s*/i, "").replace(/```\s*$/, "").trim();
+                                    if (!/<\/?[a-z][\s\S]*>/i.test(cleanText)) {
+                                        cleanText = cleanText
+                                            .split(/\n\n+/)
+                                            .map((para: string) => `<p>${para.trim().replace(/\n/g, "<br>")}</p>`)
+                                            .join("");
+                                    }
+                                    controller.enqueue(
+                                        `event: done\ndata: ${JSON.stringify({ text: cleanText })}\n\n`
+                                    );
+                                    controller.close();
+                                    return;
+                                }
+
+                                try {
+                                    const parsed = JSON.parse(data);
+                                    const choice = parsed.choices?.[0];
+                                    // Only stream actual content tokens - skip reasoning/thinking
+                                    const token = choice?.delta?.content || "";
+                                    if (token) {
+                                        fullText += token;
+                                        controller.enqueue(
+                                            `event: token\ndata: ${JSON.stringify({ token })}\n\n`
+                                        );
+                                    }
+                                } catch {
+                                    // Skip malformed JSON chunks
+                                }
+                            }
+                        }
+
+                        // If we exit the loop without [DONE], send what we have
+                        if (fullText) {
+                            let cleanText = fullText;
+                            cleanText = cleanText.replace(/^```html\s*/i, "").replace(/```\s*$/, "").trim();
+                            if (!/<\/?[a-z][\s\S]*>/i.test(cleanText)) {
+                                cleanText = cleanText
+                                    .split(/\n\n+/)
+                                    .map((para: string) => `<p>${para.trim().replace(/\n/g, "<br>")}</p>`)
+                                    .join("");
+                            }
+                            controller.enqueue(
+                                `event: done\ndata: ${JSON.stringify({ text: cleanText })}\n\n`
+                            );
+                        }
+                        controller.close();
+                    } catch (error) {
+                        console.error("Stream processing error:", error);
+                        controller.enqueue(
+                            `event: error\ndata: ${JSON.stringify({ error: "Stream processing failed" })}\n\n`
+                        );
+                        controller.close();
+                    }
+                },
+            });
+
+            return new Response(stream, {
+                headers: {
+                    "Content-Type": "text/event-stream",
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                },
+            });
+        }
+
+        // Non-streaming response (existing behavior)
         const data = await response.json().catch(() => ({ error: "Invalid JSON response from AI API" }));
 
         if (process.env.NODE_ENV === "development") {
@@ -417,19 +527,17 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         const choice = data.choices?.[0];
         let generatedText = "";
 
-        // Check standard fields and provider-specific fields (like 'reasoning_content' from some local models)
+        // Check standard fields and provider-specific fields
+        // o1 uses 'reasoning_content', qwen uses 'reasoning'
         if (typeof choice?.message?.content === "string" && choice.message.content.length > 0) {
             generatedText = choice.message.content;
 
             // Sometimes local models leak reasoning in <thinking> tags within the content
             generatedText = generatedText.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "").trim();
-        } else if (typeof choice?.message?.reasoning_content === "string") {
-            // Only fallback to reasoning if regular content is missing and we have no other choice
-            // But prefer not to use it if the user wants "final text only"
-            // However, better some text than error. We'll try to use it if we hit a length limit.
-            if (!generatedText) {
-                generatedText = choice.message.reasoning_content;
-            }
+        } else if (typeof choice?.message?.reasoning_content === "string" && choice.message.reasoning_content.length > 0) {
+            generatedText = choice.message.reasoning_content;
+        } else if (typeof choice?.message?.reasoning === "string" && choice.message.reasoning.length > 0) {
+            generatedText = choice.message.reasoning;
         } else if (typeof choice?.text === "string") {
             generatedText = choice.text;
         } else if (typeof choice?.message === "string") {

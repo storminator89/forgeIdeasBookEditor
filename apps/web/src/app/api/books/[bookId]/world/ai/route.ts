@@ -1,5 +1,6 @@
 import prisma from "@bucherstellung/db";
 import { NextRequest, NextResponse } from "next/server";
+import { buildGenreInstructions } from "@/lib/ai/genre-prompts";
 
 type RouteContext = {
     params: Promise<{ bookId: string }>;
@@ -161,6 +162,8 @@ ELEMENT:
 - Typ: ${element.type}
 - Beschreibung: ${element.description || ""}
 
+${buildGenreInstructions(book.genre)}
+
 Antworte NUR mit einem JSON-Objekt:
 {
   "name": "Name",
@@ -193,6 +196,8 @@ BUCH-KONTEXT:
 
 EXISTIERENDE ELEMENTE:
 ${existingElements || "Keine"}
+
+${buildGenreInstructions(book.genre)}
 
 Antworte NUR mit einem JSON-Objekt:
 {

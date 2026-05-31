@@ -1,5 +1,6 @@
 import prisma from "@bucherstellung/db";
 import { NextRequest, NextResponse } from "next/server";
+import { buildGenreInstructions } from "@/lib/ai/genre-prompts";
 
 type RouteContext = {
     params: Promise<{ bookId: string }>;
@@ -24,6 +25,7 @@ interface ConsistencyCheckResponse {
 // Build the consistency check prompt
 function buildConsistencyPrompt(bookData: {
     title: string;
+    genre: string | null;
     chapters: Array<{
         orderIndex: number;
         title: string;
@@ -86,6 +88,9 @@ Sei gründlich aber fokussiere dich auf echte Widersprüche, nicht auf stilistis
 ## Buchinformationen
 
 Titel: ${bookData.title}
+Genre: ${bookData.genre || "Nicht angegeben"}
+
+${buildGenreInstructions(bookData.genre)}
 
 ### Charaktere:
 ${bookData.characters.map(c => `- ${c.name} (${c.role}): ${c.description || "Keine Beschreibung"}`).join("\n")}
@@ -185,7 +190,9 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         // Get book with all related data
         const book = await prisma.book.findUnique({
             where: { id: bookId },
-            include: {
+            select: {
+                title: true,
+                genre: true,
                 chapters: {
                     orderBy: { orderIndex: "asc" },
                     select: {
@@ -238,6 +245,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         // Build the prompt
         const prompt = buildConsistencyPrompt({
             title: book.title,
+            genre: book.genre,
             chapters: book.chapters,
             characters: book.characters,
             plotPoints: book.plotPoints,

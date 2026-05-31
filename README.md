@@ -1,8 +1,8 @@
-# 📖 AI-Bucherstellung | AI Book Creation
+# AI-Bucherstellung | AI Book Creation
 
-[![Next.js](https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19-blue?style=for-the-badge&logo=react)](https://reactjs.org/)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.4+-38B2AC?style=for-the-badge&logo=tailwind-css)](https://tailwindcss.com/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-38B2AC?style=for-the-badge&logo=tailwind-css)](https://tailwindcss.com/)
 [![pnpm](https://img.shields.io/badge/pnpm-10+-E82443?style=for-the-badge&logo=pnpm)](https://pnpm.io/)
 
 [**Deutsch**](#de-deutsch) | [**English**](#en-english)
@@ -10,110 +10,193 @@
 ---
 
 <a name="de-deutsch"></a>
-## 🇩🇪 Deutsch
 
-Ein hochmodernes, KI-gestütztes Tool zur Planung, Erstellung und Verwaltung deiner literarischen Projekte. Von der ersten vagen Idee bis zum druckfertigen Manuskript unterstützt dich unsere Plattform mit intelligenten Assistenten und einem erstklassigen Schreib-Erlebnis.
+## Deutsch
 
-### ✨ Hauptmerkmale
+Ein KI-gestütztes Tool zur Planung, Erstellung und Verwaltung literarischer Projekte. Von der ersten Idee bis zum druckfertigen Manuskript.
 
-*   **🪄 KI Story Wizard**: Verwandle eine einfache Idee in ein tiefgreifendes Konzept. Die KI stellt dir gezielte Fragen, um Plot-Löcher zu schließen und Details auszuarbeiten.
-*   **👥 Intelligentes Charakter-Management**: Erstelle komplexe Charaktere mit dem KI-Assistenten. Nutze Prompts wie "Mach sie mysteriöser" oder "Füge ein dunkles Geheimnis hinzu".
-*   **📝 Premium Editor**: Ein ablenkungsfreier Schreibbereich basierend auf **TipTap**, optimiert für lange Manuskripte und strukturierte Planung.
-*   **🌍 Konsistente Welterstellung**: Verwalte Handlungspunkte und Welt-Elemente in spezialisierten Modulen. Die KI behält den Überblick über deine gesamte Welt.
-*   **📄 Hochwertiger PDF-Export**: Exportiere dein Buch in professionellem A4-Format, bereit für Lektoren oder den Eigenverlag.
+### Hauptmerkmale
+
+- **KI Story Wizard** -- Verwandle eine Idee in ein Konzept. Die KI stellt Fragen, um Plot-Löcher zu schließen.
+- **Charakter-Management** -- Erstelle komplexe Charaktere mit KI-Unterstützung.
+- **Premium Editor** -- Ablenkungsfreier Schreibbereich basierend auf TipTap.
+- **Welterstellung** -- Verwalte Handlungspunkte und Welt-Elemente.
+- **PDF-Export** -- Exportiere dein Buch in professionellem A4-Format.
 
 ---
 
 <a name="en-english"></a>
-## 🇺🇸 English
 
-A state-of-the-art, AI-powered toolkit for planning, creating, and managing your literary projects. From the first spark of an idea to a polished manuscript, our platform supports you with intelligent assistants and a premium writing experience.
+## English
 
-### ✨ Key Features
+An AI-powered toolkit for planning, creating, and managing literary projects. From the first idea to a polished manuscript.
 
-*   **🪄 AI Story Wizard**: Transform a simple spark into a deep concept. The AI asks targeted questions to fill plot holes and flesh out details.
-*   **👥 Intelligent Character Management**: Create complex characters with the AI Assistant. Use prompts like "Make them more mysterious" or "Add a tragic backstory".
-*   **📝 Premium Editor**: A distraction-free writing environment powered by **TipTap**, optimized for long manuscripts and structured planning.
-*   **🌍 Consistent World Building**: Manage plot points and world elements in dedicated modules. The AI stays aware of your entire fictional universe.
-*   **📄 High-Quality PDF Export**: Export your book in professional A4 format, ready for editors or self-publishing.
+### Key Features
 
----
-
-## 🛠 Tech Stack
-
-| Frontend | Backend | Database | Tools |
-| :--- | :--- | :--- | :--- |
-| **Next.js 15 (App Router)** | **Next.js API Routes** | **Prisma ORM** | **pnpm Workspaces** |
-| **React 19** | **Node.js 20+** | **SQLite** | **shadcn/ui** |
-| **Tailwind CSS** | **OpenAI / Local LLM** | | **Lucide Icons** |
+- **AI Story Wizard** -- Transform an idea into a concept. The AI asks questions to fill plot holes.
+- **Character Management** -- Create complex characters with AI assistance.
+- **Premium Editor** -- Distraction-free writing environment powered by TipTap.
+- **World Building** -- Manage plot points and world elements.
+- **PDF Export** -- Export your book in professional A4 format.
 
 ---
 
-## 🚀 Erste Schritte / Getting Started
+## Voraussetzungen / Prerequisites
 
-### Voraussetzungen / Prerequisites
-*   **Node.js** (v20+)
-*   **pnpm** (Recommended)
+- **Node.js** v20 oder höher
+- **pnpm** 10+ (wird als Package Manager verwendet)
+- **Turso CLI** (optional, für lokale Datenbank-Entwicklung)
 
-### Installation
-
-1.  **Clone the repository:**
-    ```bash
-    git clone [your-repo-url]
-    cd bucherstellung
-    ```
-
-2.  **Install dependencies:**
-    ```bash
-    pnpm install
-    ```
-
-3.  **Setup Database:**
-    ```bash
-    pnpm db:push
-    ```
-
-4.  **Run Development Server:**
-    ```bash
-    pnpm dev
-    ```
-    Access the app at `http://localhost:3001`.
-
----
-
-## 🛠 Commands
-
-| Command | Description |
-| :--- | :--- |
-| `pnpm install` | Install all dependencies |
-| `pnpm dev` | Start development servers |
-| `pnpm db:push` | Push Prisma schema to database |
-| `pnpm db:studio` | Open Prisma Studio |
-| `pnpm check-types` | Run TypeScript validation |
-
-## 📁 Projektstruktur / Project Structure
-
-```text
-.
-├── apps/
-│   └── web/          # Next.js Web Application
-├── packages/
-│   ├── db/           # Prisma schema & Database Client
-│   ├── env/          # Central Environment Configuration
-│   └── config/       # Shared configurations (Linting, etc.)
-└── public/
-    └── uploads/      # Character images & Media
+pnpm installieren (falls nicht vorhanden):
+```bash
+npm install -g pnpm
 ```
 
 ---
 
-## ⚙️ KI-Konfiguration / AI Configuration
+## Installation
 
-Gehe in der App zu den **Einstellungen** (`/settings`) / Navigate to **Settings** (`/settings`) in the app and configure:
-*   **API Endpoint**: (e.g., OpenAI or Local LLM)
-*   **API Key**: Your secret key
-*   **Model Name**: (e.g., `gpt-4o`, `claude-3-5-sonnet`)
+### 1. Repository klonen
+
+```bash
+git clone [your-repo-url]
+cd forgeIdeasBookEditor
+```
+
+### 2. Dependencies installieren
+
+```bash
+pnpm install
+```
+
+### 3. Umgebungsvariablen einrichten
+
+Die App benötigt eine `.env`-Datei im Verzeichnis `apps/web/`. Erstelle diese aus der Vorlage:
+
+```bash
+cp apps/web/.env.example apps/web/.env
+```
+
+Falls keine `.env.example` vorhanden ist, erstelle `apps/web/.env` mit folgendem Inhalt:
+
+```env
+# Datenbankpfad (relativ zum packages/db Verzeichnis)
+DATABASE_URL="file:../../packages/db/dev.db"
+
+# CORS Origin (optional, Standard: http://localhost:3001)
+# CORS_ORIGIN="http://localhost:3001"
+```
+
+#### Verfügbare Umgebungsvariablen
+
+| Variable | Pflicht | Beschreibung | Standardwert |
+|----------|---------|--------------|--------------|
+| `DATABASE_URL` | Ja | Pfad zur SQLite-Datenbank | -- |
+| `CORS_ORIGIN` | Nein | Erlaubte CORS-Origin | `http://localhost:3001` |
+| `NODE_ENV` | Nein | Umgebung (`development`, `production`, `test`) | `development` |
+
+### 4. Datenbank einrichten
+
+```bash
+pnpm db:push
+```
+
+Dies erstellt die SQLite-Datenbank und synchronisiert das Prisma-Schema. Der Prisma-Client wird automatisch generiert.
+
+### 5. Entwicklungsserver starten
+
+```bash
+pnpm dev
+```
+
+Die App ist unter `http://localhost:3001` erreichbar.
 
 ---
 
-Erstellt mit ❤️ für die Autoren von Morgen. | Created with ❤️ for the authors of tomorrow.
+## KI-Konfiguration / AI Configuration
+
+Die KI-Funktionen benötigen einen OpenAI-kompatiblen API-Endpunkt. Konfiguriere diesen in der App unter **Einstellungen** (`/settings`):
+
+1. **API Endpoint** -- URL des KI-Providers (z.B. `https://api.openai.com/v1` oder `http://localhost:11434/v1` für Ollama)
+2. **API Key** -- Dein API-Schlüssel
+3. **Modell** -- Klicke auf "Modelle laden" um verfügbare Modelle vom Endpunkt abzurufen, oder gib einen Modellnamen manuell ein
+
+### Unterstützte Provider
+
+| Provider | Endpoint-URL | Beispiel-Modelle |
+|----------|-------------|------------------|
+| OpenAI | `https://api.openai.com/v1` | gpt-4o, gpt-4o-mini |
+| Anthropic (via Proxy) | `https://api.anthropic.com/v1` | claude-3-5-sonnet |
+| Ollama (lokal) | `http://localhost:11434/v1` | llama3, mistral |
+| LM Studio (lokal) | `http://localhost:1234/v1` | beliebige GGUF-Modelle |
+| OpenRouter | `https://openrouter.ai/api/v1` | diverse Modelle |
+
+---
+
+## Befehle / Commands
+
+| Befehl | Beschreibung |
+|--------|--------------|
+| `pnpm install` | Alle Dependencies installieren |
+| `pnpm dev` | Alle Dev-Server starten (Web auf Port 3001) |
+| `pnpm dev:web` | Nur die Next.js App starten |
+| `pnpm build` | Alle Workspaces bauen |
+| `pnpm check-types` | TypeScript-Prüfung |
+| `pnpm db:push` | Prisma-Schema auf DB anwenden |
+| `pnpm db:generate` | Prisma-Client generieren |
+| `pnpm db:studio` | Prisma Studio öffnen |
+| `pnpm db:local` | Lokale SQLite via Turso dev starten |
+
+---
+
+## Projektstruktur / Project Structure
+
+```text
+.
+├── apps/
+│   └── web/                  # Next.js Web App (App Router)
+│       ├── src/
+│       │   ├── app/          # Seiten & API-Routen
+│       │   ├── components/   # UI-Komponenten
+│       │   └── lib/          # Hilfsfunktionen
+│       ├── public/           # Statische Assets
+│       └── .env              # Umgebungsvariablen (wird hier gespeichert!)
+├── packages/
+│   ├── db/                   # Prisma Schema & Datenbank-Client
+│   │   ├── prisma/
+│   │   │   ├── schema/       # Prisma-Schema-Dateien
+│   │   │   └── generated/    # Generierter Prisma-Client
+│   │   └── dev.db            # SQLite-Datenbank (lokal)
+│   ├── env/                  # Zentrale Env-Validierung
+│   └── config/               # Shared TypeScript-Konfiguration
+└── pnpm-workspace.yaml       # Workspace-Konfiguration
+```
+
+---
+
+## Häufige Probleme / Troubleshooting
+
+### "no such table: global_settings"
+
+Die Datenbank existiert noch nicht oder ist leer. Führe aus:
+```bash
+pnpm db:push
+```
+
+### Prisma Client Fehler nach Schema-Änderung
+
+```bash
+pnpm db:generate
+```
+
+### "Invalid environment variables"
+
+Stelle sicher, dass `apps/web/.env` existiert und `DATABASE_URL` gesetzt ist. Siehe Abschnitt [Umgebungsvariablen einrichten](#3-umgebungsvariablen-einrichten).
+
+### Port 3001 bereits beendet
+
+Ändere den Port in `apps/web/package.json` im `dev`-Script oder stoppe den anderen Prozess.
+
+---
+
+Erstellt mit Liebe für die Autoren von Morgen.

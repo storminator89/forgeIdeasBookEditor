@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
@@ -135,6 +135,9 @@ export default function ChapterEditorView({
   const [status, setStatus] = useState(chapter.status);
   const [isSaving, setIsSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamedText, setStreamedText] = useState("");
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [showAIPanel, setShowAIPanel] = useState(false);
   const [aiPrompt, setAiPrompt] = useState("");
@@ -217,7 +220,12 @@ export default function ChapterEditorView({
       return;
     }
     setIsGenerating(true);
+    setIsStreaming(true);
     setGeneratedText("");
+    setStreamedText("");
+
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     try {
       const response = await fetch(`/api/books/${chapter.bookId}/ai/generate`, {
@@ -231,7 +239,9 @@ export default function ChapterEditorView({
           worldElementIds: selectedWorldElementIds.length > 0 ? selectedWorldElementIds : undefined,
           useSummaryAsPrompt: useSummaryAsPrompt && !aiPrompt.trim(),
           targetLength,
+          stream: true,
         }),
+        signal: abortController.signal,
       });
 
       if (!response.ok) {
@@ -241,17 +251,103 @@ export default function ChapterEditorView({
             error.error || t({ de: "Generierung fehlgeschlagen", en: "Generation failed" })
           }`,
         );
+        setIsStreaming(false);
         return;
       }
 
-      const data = await response.json();
-      setGeneratedText(data.text);
-    } catch (error) {
-      console.error("Error generating text:", error);
-      setGeneratedText(t({ de: "Fehler bei der Generierung", en: "Error during generation" }));
+      // Process SSE stream
+      const reader = response.body?.getReader();
+      if (!reader) {
+        setGeneratedText(t({ de: "Stream nicht verfügbar", en: "Stream not available" }));
+        setIsStreaming(false);
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let accumulatedText = ""; // Track text locally for abort handling
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (!trimmedLine) continue;
+
+            if (trimmedLine.startsWith("event: done")) {
+              // Next line contains the final data
+              continue;
+            }
+
+            if (trimmedLine.startsWith("event: error")) {
+              continue;
+            }
+
+            if (trimmedLine.startsWith("data: ")) {
+              const dataStr = trimmedLine.slice(6);
+              try {
+                const data = JSON.parse(dataStr);
+
+                // Check if this is a done event (final text)
+                if (data.text !== undefined) {
+                  setGeneratedText(data.text);
+                  setStreamedText("");
+                  setIsStreaming(false);
+                  continue;
+                }
+
+                // Check if this is an error event
+                if (data.error) {
+                  setGeneratedText(`${t({ de: "Fehler", en: "Error" })}: ${data.error}`);
+                  setIsStreaming(false);
+                  continue;
+                }
+
+                // Token event
+                if (data.token) {
+                  accumulatedText += data.token;
+                  setStreamedText(accumulatedText);
+                }
+              } catch {
+                // Skip malformed JSON
+              }
+            }
+          }
+        }
+      } catch (streamError) {
+        // Handle stream reading errors
+        console.error("Stream reading error:", streamError);
+        if (accumulatedText) {
+          setGeneratedText(accumulatedText);
+        }
+      }
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === "AbortError") {
+        // User aborted - keep the streamed text as generated text
+        if (streamedText) {
+          setGeneratedText(streamedText);
+        } else {
+          setGeneratedText(t({ de: "Generierung abgebrochen", en: "Generation aborted" }));
+        }
+      } else {
+        console.error("Error generating text:", error);
+        setGeneratedText(t({ de: "Fehler bei der Generierung", en: "Error during generation" }));
+      }
     } finally {
       setIsGenerating(false);
+      setIsStreaming(false);
+      abortControllerRef.current = null;
     }
+  };
+
+  const handleAbortGeneration = () => {
+    abortControllerRef.current?.abort();
   };
 
   const insertGeneratedText = () => {
@@ -366,6 +462,7 @@ export default function ChapterEditorView({
               content={content}
               onChange={setContent}
               placeholder={t({ de: "Beginne mit dem Schreiben...", en: "Start writing..." })}
+              bookId={chapter.bookId}
             />
 
             {/* Summary - Hidden in Focus Mode */}
@@ -674,14 +771,25 @@ export default function ChapterEditorView({
                 }
                 className="w-full min-h-[80px] px-3 py-2 rounded-md border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
               />
-              <Button
-                onClick={handleGenerateText}
-                disabled={isGenerating || (!aiPrompt.trim() && !(useSummaryAsPrompt && summary)) || !chapter.book.aiSettings?.apiKey}
-                className="w-full"
-              >
-                {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                {t({ de: "Text generieren", en: "Generate text" })}
-              </Button>
+              {isStreaming ? (
+                <Button
+                  onClick={handleAbortGeneration}
+                  variant="destructive"
+                  className="w-full"
+                >
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {t({ de: "Generierung stoppen", en: "Stop generation" })}
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleGenerateText}
+                  disabled={isGenerating || (!aiPrompt.trim() && !(useSummaryAsPrompt && summary)) || !chapter.book.aiSettings?.apiKey}
+                  className="w-full"
+                >
+                  {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                  {t({ de: "Text generieren", en: "Generate text" })}
+                </Button>
+              )}
               {!chapter.book.aiSettings?.apiKey && (
                 <p className="text-xs text-yellow-600 dark:text-yellow-400">
                   {t({ de: "Bitte konfiguriere zuerst die KI-Einstellungen im Buch.", en: "Please configure the AI settings for this book first." })}
@@ -695,14 +803,23 @@ export default function ChapterEditorView({
               </p>
             </div>
 
-            {/* Generated Text */}
-            {generatedText && (
+            {/* Generated Text or Streaming Preview */}
+            {(generatedText || streamedText) && (
               <div className="space-y-2">
-                <label className="text-sm font-medium">{t({ de: "Generierter Text", en: "Generated text" })}</label>
-                <div className="p-3 rounded-md bg-secondary text-sm max-h-64 overflow-auto whitespace-pre-wrap">{generatedText}</div>
-                <Button onClick={insertGeneratedText} variant="outline" className="w-full">
-                  {t({ de: "In Kapitel einfügen", en: "Insert into chapter" })}
-                </Button>
+                <label className="text-sm font-medium">
+                  {isStreaming
+                    ? t({ de: "Wird generiert...", en: "Generating..." })
+                    : t({ de: "Generierter Text", en: "Generated text" })}
+                </label>
+                <div className="p-3 rounded-md bg-secondary text-sm max-h-64 overflow-auto whitespace-pre-wrap">
+                  {isStreaming ? streamedText : generatedText}
+                  {isStreaming && <span className="inline-block w-2 h-4 ml-0.5 bg-primary animate-pulse" />}
+                </div>
+                {!isStreaming && generatedText && (
+                  <Button onClick={insertGeneratedText} variant="outline" className="w-full">
+                    {t({ de: "In Kapitel einfügen", en: "Insert into chapter" })}
+                  </Button>
+                )}
               </div>
             )}
           </div>

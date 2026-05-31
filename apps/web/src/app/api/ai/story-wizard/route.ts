@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { buildGenreInstructions, getGenreConfig } from "@/lib/ai/genre-prompts";
 
 // Types for wizard responses
 type WizardQuestion = {
@@ -118,12 +119,7 @@ Generiere 3 Nachfragen.`;
     const response = await callAI(apiEndpoint, apiKey, model, systemPrompt, userPrompt);
 
     try {
-        // Extract JSON from response
-        const jsonMatch = response.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-            return JSON.parse(jsonMatch[0]);
-        }
-        throw new Error("Could not parse questions");
+        return extractJson<WizardQuestion[]>(response);
     } catch {
         // Fallback questions if parsing fails
         return [
@@ -195,7 +191,9 @@ WICHTIG:
 - Erstelle 5-7 Handlungspunkte für einen klassischen Spannungsbogen
 - Erstelle 3-5 relevante Weltelemente
 - Erstelle 5-8 Kapitelvorschläge
-- Alle Texte auf Deutsch`;
+- Alle Texte auf Deutsch
+
+${buildGenreInstructions(genre)}`;
 
     const userPrompt = `Geschichtsidee: "${storyIdea}"
 Genre: ${genre || "Fantasy"}
@@ -205,19 +203,36 @@ ${answersText}
 
 Generiere jetzt die vollständige Buchstruktur als JSON.`;
 
-    const response = await callAI(apiEndpoint, apiKey, model, systemPrompt, userPrompt, 4096);
+    const response = await callAI(apiEndpoint, apiKey, model, systemPrompt, userPrompt, 8192);
 
     try {
-        // Extract JSON from response
-        const jsonMatch = response.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-            return JSON.parse(jsonMatch[0]);
-        }
-        throw new Error("Could not parse book structure");
+        return extractJson<WizardResult>(response);
     } catch (error) {
-        console.error("Parse error:", error, "Response:", response);
+        console.error("Parse error:", error, "Response:", response.substring(0, 500));
         throw new Error("Fehler beim Parsen der KI-Antwort");
     }
+}
+
+function extractJson<T>(text: string): T {
+    // Try extracting from ```json ... ``` code fences first
+    const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fenceMatch) {
+        return JSON.parse(fenceMatch[1].trim());
+    }
+
+    // Try matching a JSON object
+    const objectMatch = text.match(/\{[\s\S]*\}/);
+    if (objectMatch) {
+        return JSON.parse(objectMatch[0]);
+    }
+
+    // Try matching a JSON array
+    const arrayMatch = text.match(/\[[\s\S]*\]/);
+    if (arrayMatch) {
+        return JSON.parse(arrayMatch[0]);
+    }
+
+    throw new Error("No JSON found in response");
 }
 
 async function callAI(

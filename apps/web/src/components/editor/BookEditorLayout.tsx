@@ -710,10 +710,12 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
 
       {showRelationModal && editingRelationsCharacter && (
         <CharacterRelationModal
-          open={showRelationModal}
-          onOpenChange={setShowRelationModal}
           character={editingRelationsCharacter}
           allCharacters={book.characters}
+          bookId={book.id}
+          onClose={() => {
+            setShowRelationModal(false);
+          }}
           onSave={() => {
             setShowRelationModal(false);
           }}

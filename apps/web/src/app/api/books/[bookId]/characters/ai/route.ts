@@ -1,5 +1,6 @@
 import prisma from "@bucherstellung/db";
 import { NextRequest, NextResponse } from "next/server";
+import { buildGenreInstructions } from "@/lib/ai/genre-prompts";
 
 type RouteContext = {
     params: Promise<{ bookId: string }>;
@@ -335,6 +336,8 @@ AKTUELLER CHARAKTER:
 - Charakterbogen: ${character.arc || ""}
 - Notizen: ${character.notes || ""}
 
+${buildGenreInstructions(book.genre)}
+
 Antworte NUR mit einem JSON-Objekt:
 {
   "name": "Name (kann gleich bleiben)",
@@ -385,6 +388,8 @@ WICHTIG:
 - Der neue Charakter MUSS zu den existierenden Charakteren passen
 - Erstelle interessante Beziehungen/Kontraste
 - Alle Texte auf Deutsch
+
+${buildGenreInstructions(book.genre)}
 
 Antworte NUR mit einem JSON-Objekt:
 {

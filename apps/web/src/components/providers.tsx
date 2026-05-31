@@ -12,7 +12,13 @@ type ProvidersProps = {
 
 export default function Providers({ children, initialLocale }: ProvidersProps) {
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="system"
+      enableSystem
+      disableTransitionOnChange
+      scriptProps={{ "data-suppress-hydration-warning": true }}
+    >
       <LocaleProvider initialLocale={initialLocale}>
         {children}
         <Toaster richColors />
