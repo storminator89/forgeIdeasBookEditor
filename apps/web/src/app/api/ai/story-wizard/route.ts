@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildGenreInstructions, getGenreConfig } from "@/lib/ai/genre-prompts";
+import prisma from "@bucherstellung/db";
+import { decryptIfNeeded } from "@/lib/crypto";
 
 // Types for wizard responses
 type WizardQuestion = {
@@ -52,11 +54,20 @@ type WizardResult = {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { action, storyIdea, genre, answers, apiEndpoint, apiKey, model } = body;
+        const { action, storyIdea, genre, answers } = body;
 
-        if (!apiEndpoint || !apiKey) {
+        // Always read API config from global settings (never from client body)
+        const settings = await prisma.globalSettings.findUnique({
+            where: { id: "default" },
+        });
+
+        const apiKey = settings?.apiKey ? decryptIfNeeded(settings.apiKey) : null;
+        const apiEndpoint = settings?.apiEndpoint || "https://api.openai.com/v1";
+        const model = settings?.model || "gpt-4o-mini";
+
+        if (!apiKey) {
             return NextResponse.json(
-                { error: "API-Konfiguration fehlt. Bitte konfiguriere deine KI-Einstellungen." },
+                { error: "API-Konfiguration fehlt. Bitte konfiguriere deine KI-Einstellungen unter Einstellungen." },
                 { status: 400 }
             );
         }

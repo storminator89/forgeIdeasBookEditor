@@ -1,6 +1,7 @@
 import prisma from "@bucherstellung/db";
 import { NextRequest, NextResponse } from "next/server";
 import { buildGenreInstructions } from "@/lib/ai/genre-prompts";
+import { decryptIfNeeded } from "@/lib/crypto";
 
 type RouteContext = {
     params: Promise<{ bookId: string }>;
@@ -101,7 +102,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
 
         const aiSettings = {
             apiEndpoint: settings.apiEndpoint,
-            apiKey: settings.apiKey,
+            apiKey: decryptIfNeeded(settings.apiKey) ?? "",
             model: settings.model,
         };
 
@@ -219,7 +220,7 @@ Antworte NUR mit einem JSON-Objekt:
 async function callAI(settings: { apiEndpoint: string; apiKey: string; model: string }, systemPrompt: string, userPrompt: string): Promise<string> {
     const response = await fetch(`${settings.apiEndpoint}/chat/completions`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.apiKey}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${decryptIfNeeded(settings.apiKey)}` },
         body: JSON.stringify({
             model: settings.model,
             messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],

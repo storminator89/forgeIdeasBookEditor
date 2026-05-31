@@ -1,6 +1,7 @@
 import prisma from "@bucherstellung/db";
 import { NextRequest, NextResponse } from "next/server";
 import { buildGenreInstructions } from "@/lib/ai/genre-prompts";
+import { decryptIfNeeded } from "@/lib/crypto";
 
 type RouteContext = {
     params: Promise<{ bookId: string }>;
@@ -238,7 +239,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         // Cast settings with apiKey as non-null (we checked above)
         const aiSettings = {
             apiEndpoint: settings.apiEndpoint,
-            apiKey: settings.apiKey,
+            apiKey: decryptIfNeeded(settings.apiKey) ?? "",
             model: settings.model,
         };
 
@@ -427,7 +428,7 @@ async function callAI(
         method: "POST",
         headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${settings.apiKey}`,
+            Authorization: `Bearer ${decryptIfNeeded(settings.apiKey)}`,
         },
         body: JSON.stringify({
             model: settings.model,

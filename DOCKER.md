@@ -27,10 +27,22 @@ docker compose build
 | Variable | Pflicht | Beschreibung | Standardwert |
 |----------|---------|--------------|--------------|
 | `DATABASE_URL` | Ja | Pfad zur SQLite-Datei | `file:/app/data/dev.db` |
+| `ENCRYPTION_KEY` | Ja | Verschluesselungs-Key fuer API-Keys (64 Hex-Zeichen) | - |
 | `CORS_ORIGIN` | Nein | Erlaubte CORS-Origin | `http://localhost:3002` |
 | `NODE_ENV` | Nein | Umgebung | `production` |
 | `PORT` | Nein | Server-Port | `3000` |
 | `HOSTNAME` | Nein | Server-Bind-Adresse | `0.0.0.0` |
+
+**Key generieren:**
+```bash
+openssl rand -hex 32
+```
+
+In `.env`-Datei speichern oder als Umgebungsvariable setzen:
+```bash
+export ENCRYPTION_KEY=$(openssl rand -hex 32)
+docker compose up -d
+```
 
 ### Persistente Daten
 
@@ -108,10 +120,22 @@ docker compose build
 | Variable | Required | Description | Default |
 |----------|----------|-------------|---------|
 | `DATABASE_URL` | Yes | SQLite file path | `file:/app/data/dev.db` |
+| `ENCRYPTION_KEY` | Yes | Encryption key for API keys (64 hex chars) | - |
 | `CORS_ORIGIN` | No | CORS origin URL | `http://localhost:3002` |
 | `NODE_ENV` | No | Environment mode | `production` |
 | `PORT` | No | Server port | `3000` |
 | `HOSTNAME` | No | Server bind address | `0.0.0.0` |
+
+**Generate key:**
+```bash
+openssl rand -hex 32
+```
+
+Store in `.env` file or set as environment variable:
+```bash
+export ENCRYPTION_KEY=$(openssl rand -hex 32)
+docker compose up -d
+```
 
 ### Persistent Data
 

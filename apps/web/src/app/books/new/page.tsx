@@ -13,12 +13,6 @@ import { Label } from "@/components/ui/label";
 import StoryWizard from "@/components/wizard/StoryWizard";
 import { useI18n } from "@/components/locale-provider";
 
-type AISettings = {
-    apiEndpoint: string;
-    apiKey: string;
-    model: string;
-} | null;
-
 type CreationMode = "select" | "manual" | "wizard" | "import";
 
 export default function NewBookPage() {
@@ -26,7 +20,8 @@ export default function NewBookPage() {
     const router = useRouter();
     const [mode, setMode] = useState<CreationMode>("select");
     const [isLoading, setIsLoading] = useState(false);
-    const [aiSettings, setAiSettings] = useState<AISettings>(null);
+    const [hasApiKey, setHasApiKey] = useState(false);
+    const [aiModel, setAiModel] = useState<string>("");
     const [loadingSettings, setLoadingSettings] = useState(true);
     const [formData, setFormData] = useState({
         title: "",
@@ -48,26 +43,15 @@ export default function NewBookPage() {
     } | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // Load global AI settings
+    // Check if global AI settings are configured
     useEffect(() => {
-        async function loadAISettings() {
+        async function checkAISettings() {
             try {
-                // Fetch global settings with unmasked API key
-                const response = await fetch("/api/settings", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ action: "getUnmasked" }),
-                });
-
+                const response = await fetch("/api/settings");
                 if (response.ok) {
                     const settings = await response.json();
-                    if (settings.apiKey) {
-                        setAiSettings({
-                            apiEndpoint: settings.apiEndpoint,
-                            apiKey: settings.apiKey,
-                            model: settings.model,
-                        });
-                    }
+                    setHasApiKey(!!settings.hasApiKey);
+                    setAiModel(settings.model || "");
                 }
             } catch (error) {
                 console.error("Error loading global settings:", error);
@@ -75,7 +59,7 @@ export default function NewBookPage() {
                 setLoadingSettings(false);
             }
         }
-        loadAISettings();
+        checkAISettings();
     }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -180,9 +164,9 @@ export default function NewBookPage() {
                 <div className="grid md:grid-cols-3 gap-6">
                     {/* AI Wizard Option */}
                     <Card
-                        className={`cursor-pointer transition-all hover:shadow-lg hover:border-primary/50 ${!aiSettings ? "opacity-50" : ""
+                        className={`cursor-pointer transition-all hover:shadow-lg hover:border-primary/50 ${!hasApiKey ? "opacity-50" : ""
                             }`}
-                        onClick={() => aiSettings && setMode("wizard")}
+                        onClick={() => hasApiKey && setMode("wizard")}
                     >
                         <CardHeader>
                             <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center mb-4">
@@ -202,10 +186,10 @@ export default function NewBookPage() {
                                     <Loader2 className="h-4 w-4 animate-spin" />
                                     {t({ de: "Lade Einstellungen...", en: "Loading settings..." })}
                                 </div>
-                            ) : aiSettings ? (
+                            ) : hasApiKey ? (
                                 <div className="space-y-2">
                                     <div className="text-sm text-green-600 dark:text-green-400">
-                                        {t({ de: "? KI bereit ({{model}})", en: "? AI ready ({{model}})" }, { model: aiSettings.model })}
+                                        {t({ de: "? KI bereit ({{model}})", en: "? AI ready ({{model}})" }, { model: aiModel })}
                                     </div>
                                     <Button className="w-full" onClick={() => setMode("wizard")}>
                                         <Sparkles className="mr-2 h-4 w-4" />
@@ -282,7 +266,7 @@ export default function NewBookPage() {
     }
 
     // AI Wizard mode
-    if (mode === "wizard" && aiSettings) {
+    if (mode === "wizard" && hasApiKey) {
         return (
             <div className="container mx-auto py-8 px-4 max-w-3xl">
                 <button
@@ -302,9 +286,6 @@ export default function NewBookPage() {
                 </p>
 
                 <StoryWizard
-                    apiEndpoint={aiSettings.apiEndpoint}
-                    apiKey={aiSettings.apiKey}
-                    model={aiSettings.model}
                     onCancel={() => setMode("select")}
                 />
             </div>

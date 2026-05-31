@@ -1,6 +1,7 @@
 import prisma from "@bucherstellung/db";
 import { NextRequest } from "next/server";
 import { buildGenreInstructions } from "@/lib/ai/genre-prompts";
+import { decryptIfNeeded } from "@/lib/crypto";
 import { fetchBookContext, formatContextForPrompt } from "@/lib/ai/fetch-book-context";
 
 type RouteContext = {
@@ -151,7 +152,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                Authorization: `Bearer ${aiSettings.apiKey}`,
+                Authorization: `Bearer ${decryptIfNeeded(aiSettings.apiKey)}`,
             },
             body: JSON.stringify(requestBody),
         });

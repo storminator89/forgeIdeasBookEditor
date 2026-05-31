@@ -69,9 +69,6 @@ type WizardResult = {
 };
 
 interface StoryWizardProps {
-    apiEndpoint: string;
-    apiKey: string;
-    model: string;
     onCancel: () => void;
 }
 
@@ -101,9 +98,6 @@ const LOADING_PHRASES = [
 ];
 
 export default function StoryWizard({
-    apiEndpoint,
-    apiKey,
-    model,
     onCancel,
 }: StoryWizardProps) {
     const { t } = useI18n();
@@ -147,9 +141,6 @@ export default function StoryWizard({
                     action: "questions",
                     storyIdea,
                     genre,
-                    apiEndpoint,
-                    apiKey,
-                    model,
                 }),
             });
 
@@ -188,9 +179,6 @@ export default function StoryWizard({
                     storyIdea,
                     genre,
                     answers,
-                    apiEndpoint,
-                    apiKey,
-                    model,
                 }),
             });
 
@@ -297,11 +285,7 @@ export default function StoryWizard({
             await fetch(`/api/books/${book.id}/ai-settings`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    apiEndpoint,
-                    apiKey,
-                    model,
-                }),
+                body: JSON.stringify({}),
             });
 
             router.push(`/books/${book.id}` as Route);

@@ -1,23 +1,21 @@
 import prisma from "@bucherstellung/db";
 import { NextRequest, NextResponse } from "next/server";
+import { decryptIfNeeded } from "@/lib/crypto";
 
 export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
         let apiEndpoint = searchParams.get("apiEndpoint");
-        let apiKey = searchParams.get("apiKey");
 
-        // Fall back to saved global settings if not provided
-        if (!apiEndpoint || !apiKey) {
-            const settings = await prisma.globalSettings.findUnique({
-                where: { id: "default" },
-            });
+        // Always read API key from global settings (never from query params)
+        const settings = await prisma.globalSettings.findUnique({
+            where: { id: "default" },
+        });
 
-            if (settings) {
-                apiEndpoint = apiEndpoint || settings.apiEndpoint;
-                apiKey = apiKey || settings.apiKey || null;
-            }
+        if (settings) {
+            apiEndpoint = apiEndpoint || settings.apiEndpoint;
         }
+        const apiKey = settings?.apiKey ? decryptIfNeeded(settings.apiKey) : null;
 
         if (!apiEndpoint) {
             return NextResponse.json(

@@ -1,5 +1,6 @@
 import prisma from "@bucherstellung/db";
 import { NextRequest, NextResponse } from "next/server";
+import { encrypt, decryptIfNeeded } from "@/lib/crypto";
 
 type RouteContext = {
     params: Promise<{ bookId: string }>;
@@ -21,12 +22,11 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
             });
         }
 
-        // Mask API key for security (only show last 4 chars)
+        // Mask API key for security (decrypt first to get last 4 chars)
+        const plainKey = decryptIfNeeded(aiSettings.apiKey);
         const maskedSettings = {
             ...aiSettings,
-            apiKey: aiSettings.apiKey
-                ? `****${aiSettings.apiKey.slice(-4)}`
-                : null,
+            apiKey: plainKey ? `****${plainKey.slice(-4)}` : null,
         };
 
         return NextResponse.json(maskedSettings);
@@ -53,12 +53,15 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
             systemPrompt,
         } = body;
 
+        // Encrypt API key before storing
+        const encryptedApiKey = apiKey ? encrypt(apiKey) : undefined;
+
         const aiSettings = await prisma.aISettings.upsert({
             where: { bookId },
             create: {
                 bookId,
                 ...(apiEndpoint !== undefined && { apiEndpoint }),
-                ...(apiKey !== undefined && { apiKey }),
+                ...(encryptedApiKey !== undefined && { apiKey: encryptedApiKey }),
                 ...(model !== undefined && { model }),
                 ...(temperature !== undefined && { temperature }),
                 ...(maxTokens !== undefined && { maxTokens }),
@@ -66,7 +69,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
             },
             update: {
                 ...(apiEndpoint !== undefined && { apiEndpoint }),
-                ...(apiKey !== undefined && { apiKey }),
+                ...(encryptedApiKey !== undefined && { apiKey: encryptedApiKey }),
                 ...(model !== undefined && { model }),
                 ...(temperature !== undefined && { temperature }),
                 ...(maxTokens !== undefined && { maxTokens }),
@@ -75,11 +78,10 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
         });
 
         // Mask API key for security
+        const plainKey = decryptIfNeeded(aiSettings.apiKey);
         const maskedSettings = {
             ...aiSettings,
-            apiKey: aiSettings.apiKey
-                ? `****${aiSettings.apiKey.slice(-4)}`
-                : null,
+            apiKey: plainKey ? `****${plainKey.slice(-4)}` : null,
         };
 
         return NextResponse.json(maskedSettings);

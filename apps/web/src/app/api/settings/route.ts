@@ -1,5 +1,6 @@
 import prisma from "@bucherstellung/db";
 import { NextRequest, NextResponse } from "next/server";
+import { encrypt, decryptIfNeeded } from "@/lib/crypto";
 
 // GET global settings
 export async function GET() {
@@ -15,10 +16,11 @@ export async function GET() {
             });
         }
 
-        // Mask API key for security (only show that it exists)
+        // Mask API key for security (decrypt first to get last 4 chars of actual key)
+        const plainKey = decryptIfNeeded(settings.apiKey);
         const maskedSettings = {
             ...settings,
-            apiKey: settings.apiKey ? `****${settings.apiKey.slice(-4)}` : null,
+            apiKey: plainKey ? `****${plainKey.slice(-4)}` : null,
             hasApiKey: !!settings.apiKey,
         };
 
@@ -45,12 +47,15 @@ export async function PATCH(request: NextRequest) {
             systemPrompt,
         } = body;
 
+        // Encrypt API key before storing
+        const encryptedApiKey = apiKey ? encrypt(apiKey) : undefined;
+
         const settings = await prisma.globalSettings.upsert({
             where: { id: "default" },
             create: {
                 id: "default",
                 ...(apiEndpoint !== undefined && { apiEndpoint }),
-                ...(apiKey !== undefined && { apiKey }),
+                ...(encryptedApiKey !== undefined && { apiKey: encryptedApiKey }),
                 ...(model !== undefined && { model }),
                 ...(temperature !== undefined && { temperature }),
                 ...(maxTokens !== undefined && { maxTokens }),
@@ -58,7 +63,7 @@ export async function PATCH(request: NextRequest) {
             },
             update: {
                 ...(apiEndpoint !== undefined && { apiEndpoint }),
-                ...(apiKey !== undefined && { apiKey }),
+                ...(encryptedApiKey !== undefined && { apiKey: encryptedApiKey }),
                 ...(model !== undefined && { model }),
                 ...(temperature !== undefined && { temperature }),
                 ...(maxTokens !== undefined && { maxTokens }),
@@ -67,9 +72,10 @@ export async function PATCH(request: NextRequest) {
         });
 
         // Mask API key for security
+        const plainKey = decryptIfNeeded(settings.apiKey);
         const maskedSettings = {
             ...settings,
-            apiKey: settings.apiKey ? `****${settings.apiKey.slice(-4)}` : null,
+            apiKey: plainKey ? `****${plainKey.slice(-4)}` : null,
             hasApiKey: !!settings.apiKey,
         };
 
@@ -106,7 +112,7 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
             apiEndpoint: settings.apiEndpoint,
-            apiKey: settings.apiKey,
+            apiKey: decryptIfNeeded(settings.apiKey),
             model: settings.model,
             temperature: settings.temperature,
             maxTokens: settings.maxTokens,

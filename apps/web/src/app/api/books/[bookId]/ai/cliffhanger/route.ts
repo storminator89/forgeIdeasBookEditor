@@ -1,6 +1,7 @@
 import prisma from "@bucherstellung/db";
 import { NextRequest, NextResponse } from "next/server";
 import { buildGenreInstructions } from "@/lib/ai/genre-prompts";
+import { decryptIfNeeded } from "@/lib/crypto";
 import { fetchBookContext, formatContextForPrompt } from "@/lib/ai/fetch-book-context";
 import { extractAIContent, extractJSON } from "@/lib/ai/extract-content";
 
@@ -67,7 +68,7 @@ Antworte AUSSCHLIESSLICH mit gültigem JSON (kein anderer Text, nur JSON):
 
         const response = await fetch(`${aiSettings.apiEndpoint}/chat/completions`, {
             method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${aiSettings.apiKey}` },
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${decryptIfNeeded(aiSettings.apiKey)}` },
             body: JSON.stringify({
                 model: aiSettings.model,
                 messages: [
