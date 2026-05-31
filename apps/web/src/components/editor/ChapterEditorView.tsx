@@ -20,6 +20,7 @@ import {
   AlignJustify,
   Maximize2,
   Minimize2,
+  Wand2,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import RichTextEditor, { getTextStatistics } from "@/components/editor/RichTextEditor";
+import AdvancedAIPanel from "@/components/editor/AdvancedAIPanel";
 import { useI18n } from "@/components/locale-provider";
 
 type AISettings = {
@@ -153,6 +155,9 @@ export default function ChapterEditorView({
   const [selectedWorldElementIds, setSelectedWorldElementIds] = useState<string[]>([]);
   const [useSummaryAsPrompt, setUseSummaryAsPrompt] = useState(true);
   const [targetLength, setTargetLength] = useState("medium");
+
+  // Advanced AI panel state
+  const [showAdvancedAI, setShowAdvancedAI] = useState(false);
 
   // Focus mode state
   const [isFocusMode, setIsFocusMode] = useState(false);
@@ -361,6 +366,12 @@ export default function ChapterEditorView({
     }
   };
 
+  const handleAdvancedAIInsert = (text: string) => {
+    const spacer = content.trim() ? "<p><br></p>" : "";
+    setContent(content + spacer + text);
+    setShowAdvancedAI(false);
+  };
+
   const handleDelete = async () => {
     if (
       !confirm(
@@ -419,9 +430,13 @@ export default function ChapterEditorView({
               {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               <span className="ml-2 hidden sm:inline">{t({ de: "Speichern", en: "Save" })}</span>
             </Button>
-            <Button variant={showAIPanel ? "default" : "outline"} size="sm" onClick={() => setShowAIPanel(!showAIPanel)}>
+            <Button variant={showAIPanel ? "default" : "outline"} size="sm" onClick={() => { setShowAIPanel(!showAIPanel); setShowAdvancedAI(false); }}>
               <Sparkles className="h-4 w-4" />
               <span className="ml-2 hidden sm:inline">{t({ de: "KI", en: "AI" })}</span>
+            </Button>
+            <Button variant={showAdvancedAI ? "default" : "outline"} size="sm" onClick={() => { setShowAdvancedAI(!showAdvancedAI); setShowAIPanel(false); }}>
+              <Wand2 className="h-4 w-4" />
+              <span className="ml-2 hidden sm:inline">{t({ de: "KI-Tools", en: "AI Tools" })}</span>
             </Button>
             <Button
               variant="outline"
@@ -588,6 +603,26 @@ export default function ChapterEditorView({
           </div>
         )}
       </div>
+
+      {/* Advanced AI Panel - Hidden in Focus Mode */}
+      {showAdvancedAI && !isFocusMode && (
+        <aside className="w-96 border-l bg-card flex flex-col">
+          <div className="p-4 border-b">
+            <h2 className="font-semibold flex items-center gap-2">
+              <Wand2 className="h-4 w-4 text-primary" />
+              {t({ de: "KI-Werkzeuge", en: "AI Tools" })}
+            </h2>
+          </div>
+          <AdvancedAIPanel
+            bookId={chapter.bookId}
+            chapterId={chapter.id}
+            chapterTitle={title}
+            chapterSummary={summary}
+            currentContent={content}
+            onInsertText={handleAdvancedAIInsert}
+          />
+        </aside>
+      )}
 
       {/* AI Panel - Hidden in Focus Mode */}
       {showAIPanel && !isFocusMode && (

@@ -1,10 +1,15 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Loader2, Download, Book, FileText } from "lucide-react";
+import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Loader2, Download, Book, FileText, ChevronDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { toJpeg } from "html-to-image";
+import {
+    DropdownMenu,
+    DropdownMenuTrigger,
+    DropdownMenuContent,
+    DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { jsPDF } from "jspdf";
 import JSZip from "jszip";
 import {
@@ -34,6 +39,7 @@ interface BookPreviewProps {
     hideCoverText?: boolean;
     chapters: Chapter[];
     className?: string;
+    onClose?: () => void;
 }
 
 export default function BookPreview({
@@ -45,9 +51,10 @@ export default function BookPreview({
     hideCoverText = false,
     chapters,
     className,
+    onClose,
 }: BookPreviewProps) {
     const [currentPage, setCurrentPage] = useState(0);
-    const [isFullscreen, setIsFullscreen] = useState(true); // Start in fullscreen for better PDF export
+    const [isFullscreen, setIsFullscreen] = useState(false);
     const [loadedContent, setLoadedContent] = useState<Record<string, string>>({});
     const [loadingChapterId, setLoadingChapterId] = useState<string | null>(null);
     const [isExporting, setIsExporting] = useState(false);
@@ -291,67 +298,387 @@ export default function BookPreview({
         return match ? match[0] : ".jpg";
     };
 
-    // PDF Export function
+    // PDF Export function — native text-based rendering
     const exportToPdf = async () => {
-        if (!bookRef.current || allPages.length === 0) return;
+        if (chapters.length === 0) return;
 
         setIsExporting(true);
-        const originalPage = currentPage;
 
         try {
-            // A4 dimensions in mm: 210 x 297
-            const pdf = new jsPDF({
-                orientation: 'portrait',
-                unit: 'mm',
-                format: 'a4',
-            });
+            const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
 
-            const pageWidth = 210;
-            const pageHeight = 297;
+            // A4 layout constants
+            const W = 210;
+            const H = 297;
+            const marginLeft = 25;
+            const marginRight = 20;
+            const marginTop = 25;
+            const marginBottom = 25;
+            const contentW = W - marginLeft - marginRight;
 
-            // Calculate aspect ratio to fit A4 page without distortion (width priority)
-            // Original aspect ratio: 500 / 650 = 0.769
-            // A4 aspect ratio: 210 / 297 = 0.707
-            // We scale to fit width (210mm), height will be determined by ratio
-            // But we actually want to fill the page for a "book" feel, letting margins handle it.
-            // Since our source is "stubbier" than A4, stretching to full A4 height would distort verticality.
-            // Better to fit width and center vertically or just fill. 
-            // The user wants "A4 format", usually meaning "Make it big".
-            // Let's stick to full page fill for now but ensure padding prevents cutoff.
+            // Typography
+            const bodySize = 11;
+            const bodyLeading = 5.5; // line height in mm
+            const indentFirstLine = 7; // mm
+            const paraSpacing = 3; // mm after paragraph
 
-            // Iterate through all pages
-            for (let i = 0; i < allPages.length; i++) {
-                setCurrentPage(i);
+            // State
+            let y = marginTop;
+            let pageNum = 0;
 
-                // Wait for content to render and fonts to load
-                await new Promise(resolve => setTimeout(resolve, 350)); // Slightly longer wait
+            const addPage = () => {
+                if (pageNum > 0) pdf.addPage();
+                pageNum++;
+                y = marginTop;
+                // Page number footer
+                pdf.setFontSize(9);
+                pdf.setTextColor(160);
+                pdf.text(String(pageNum), W / 2, H - 12, { align: "center" });
+                pdf.setTextColor(0);
+                y = marginTop;
+            };
 
-                if (bookRef.current) {
-                    try {
-                        const imgData = await toJpeg(bookRef.current, {
-                            quality: 0.98, // Higher quality
-                            backgroundColor: '#ffffff',
-                            pixelRatio: 3, // Higher resolution for A4
-                        });
+            const needSpace = (mm: number) => {
+                if (y + mm > H - marginBottom) {
+                    addPage();
+                    return true;
+                }
+                return false;
+            };
 
-                        if (i > 0) {
-                            pdf.addPage();
-                        }
+            // ── Cover page ──
+            addPage();
 
-                        pdf.addImage(imgData, 'JPEG', 0, 0, pageWidth, pageHeight);
-                    } catch (err) {
-                        console.error(`Error rendering page ${i}:`, err);
+            // Fetch cover image if available
+            let coverImgData: string | null = null;
+            if (coverUrl) {
+                try {
+                    const resp = await fetch(coverUrl);
+                    const blob = await resp.blob();
+                    const reader = new FileReader();
+                    coverImgData = await new Promise<string>((resolve, reject) => {
+                        reader.onload = () => resolve(reader.result as string);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(blob);
+                    });
+                } catch { /* skip cover image */ }
+            }
+
+            if (coverImgData) {
+                try {
+                    const img = new Image();
+                    img.src = coverImgData;
+                    await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; });
+                    const imgAspect = img.width / img.height;
+                    const imgW = contentW;
+                    const imgH = imgW / imgAspect;
+                    const imgY = (H - imgH) / 2;
+                    const ext = coverImgData.includes("image/png") ? "PNG" : "JPEG";
+                    pdf.addImage(coverImgData, ext, marginLeft, imgY, imgW, imgH);
+
+                    if (!hideCoverText) {
+                        pdf.setDrawColor(255);
+                        pdf.setFillColor(255, 255, 255);
+                        pdf.rect(marginLeft, imgY + imgH - 30, imgW, 30, "F");
+                        pdf.setFontSize(24);
+                        pdf.setFont("helvetica", "bold");
+                        pdf.text(bookTitle, W / 2, imgY + imgH - 18, { align: "center" });
+                        pdf.setFontSize(13);
+                        pdf.setFont("helvetica", "italic");
+                        pdf.text(author, W / 2, imgY + imgH - 8, { align: "center" });
                     }
+                } catch {
+                    // fallback to text-only cover
+                    coverImgData = null;
                 }
             }
 
-            // Save PDF
-            pdf.save(`${bookTitle.replace(/[^a-zA-Z0-9]/g, '_')}_A4.pdf`);
+            if (!coverImgData) {
+                // Text-only cover
+                pdf.setFontSize(32);
+                pdf.setFont("helvetica", "bold");
+                const titleLines = pdf.splitTextToSize(bookTitle, contentW - 20);
+                const titleBlockH = titleLines.length * 12;
+                const coverY = (H - titleBlockH) / 2 - 10;
+                pdf.text(titleLines, W / 2, coverY, { align: "center" });
 
+                // Decorative line
+                pdf.setDrawColor(180, 83, 9); // amber
+                pdf.setLineWidth(0.5);
+                const lineY = coverY + titleBlockH + 5;
+                pdf.line(W / 2 - 20, lineY, W / 2 + 20, lineY);
+
+                pdf.setFontSize(14);
+                pdf.setFont("helvetica", "italic");
+                pdf.setTextColor(100);
+                pdf.text(author, W / 2, lineY + 12, { align: "center" });
+                pdf.setTextColor(0);
+            }
+
+            // ── Fetch all chapter content ──
+            const orderedChapters = [...chapters].sort((a, b) => a.orderIndex - b.orderIndex);
+            const chapterContents: { title: string; html: string }[] = [];
+
+            for (const ch of orderedChapters) {
+                let content = loadedContent[ch.id] || ch.content || "";
+                if (!content.trim()) {
+                    try {
+                        const resp = await fetch(`/api/books/${bookId}/chapters/${ch.id}`);
+                        if (resp.ok) {
+                            const data = await resp.json();
+                            content = data.content || "";
+                        }
+                    } catch { /* skip */ }
+                }
+                chapterContents.push({ title: ch.title, html: content });
+            }
+
+            // ── HTML → document model parser ──
+            type TextRun = { text: string; bold?: boolean; italic?: boolean };
+            type Block =
+                | { type: "h1" | "h2" | "h3"; runs: TextRun[] }
+                | { type: "p"; runs: TextRun[]; indent?: boolean }
+                | { type: "quote"; runs: TextRun[] }
+                | { type: "li"; runs: TextRun[]; ordered?: boolean; index?: number }
+                | { type: "hr" };
+
+            const parseRuns = (node: Node): TextRun[] => {
+                const runs: TextRun[] = [];
+                if (node.nodeType === Node.TEXT_NODE) {
+                    const t = node.textContent || "";
+                    if (t) runs.push({ text: t });
+                    return runs;
+                }
+                if (node.nodeType !== Node.ELEMENT_NODE) return runs;
+                const el = node as HTMLElement;
+                const tag = el.tagName.toLowerCase();
+                const childRuns = Array.from(el.childNodes).flatMap(parseRuns);
+
+                if (tag === "strong" || tag === "b") return childRuns.map(r => ({ ...r, bold: true }));
+                if (tag === "em" || tag === "i") return childRuns.map(r => ({ ...r, italic: true }));
+                if (tag === "u") return childRuns; // jsPDF doesn't support underline easily
+                if (tag === "br") return [{ text: "\n" }];
+                if (tag === "img") return []; // images handled separately if needed
+                return childRuns;
+            };
+
+            const parseHtml = (html: string): Block[] => {
+                if (!html.trim()) return [];
+                const tmp = document.createElement("div");
+                tmp.innerHTML = html;
+                const blocks: Block[] = [];
+
+                for (const child of Array.from(tmp.children)) {
+                    const tag = child.tagName.toLowerCase();
+                    const runs = parseRuns(child);
+
+                    if (tag === "h1") blocks.push({ type: "h1", runs });
+                    else if (tag === "h2") blocks.push({ type: "h2", runs });
+                    else if (tag === "h3") blocks.push({ type: "h3", runs });
+                    else if (tag === "blockquote") blocks.push({ type: "quote", runs });
+                    else if (tag === "ul") {
+                        Array.from(child.querySelectorAll("li")).forEach(li => {
+                            blocks.push({ type: "li", runs: parseRuns(li) });
+                        });
+                    }
+                    else if (tag === "ol") {
+                        Array.from(child.querySelectorAll("li")).forEach((li, i) => {
+                            blocks.push({ type: "li", runs: parseRuns(li), ordered: true, index: i + 1 });
+                        });
+                    }
+                    else if (tag === "hr") blocks.push({ type: "hr" });
+                    else if (tag === "p" || tag === "div") blocks.push({ type: "p", runs, indent: true });
+                    else {
+                        // fallback: treat as paragraph
+                        if (runs.length) blocks.push({ type: "p", runs });
+                    }
+                }
+                return blocks;
+            };
+
+            // Merge adjacent text runs
+            const mergeRuns = (runs: TextRun[]): TextRun[] => {
+                const merged: TextRun[] = [];
+                for (const r of runs) {
+                    const last = merged[merged.length - 1];
+                    if (last && last.bold === r.bold && last.italic === r.italic) {
+                        last.text += r.text;
+                    } else {
+                        merged.push({ ...r });
+                    }
+                }
+                return merged;
+            };
+
+            // ── Render blocks to PDF ──
+            const renderRuns = (runs: TextRun[], x: number, maxWidth: number, fontSize: number, lineH: number, firstLineIndent?: number) => {
+                runs = mergeRuns(runs);
+                let lineX = x;
+                let lineStartX = x;
+                let isFirstLine = true;
+                let textBuf = "";
+
+                const flushLine = () => {
+                    if (!textBuf) return;
+                    needSpace(lineH);
+                    pdf.text(textBuf, lineStartX, y);
+                    y += lineH;
+                    textBuf = "";
+                    lineStartX = x;
+                    isFirstLine = false;
+                };
+
+                for (const run of runs) {
+                    pdf.setFont("helvetica", run.bold ? "bold" : run.italic ? "italic" : "normal");
+                    pdf.setFontSize(fontSize);
+
+                    const words = run.text.split(/(\s+)/);
+                    for (const word of words) {
+                        if (word === "\n") {
+                            flushLine();
+                            continue;
+                        }
+                        if (!word) continue;
+
+                        const wordW = pdf.getTextWidth(word);
+                        const indent = isFirstLine && firstLineIndent ? firstLineIndent : 0;
+                        const available = maxWidth - indent - (textBuf ? pdf.getTextWidth(textBuf) : 0);
+
+                        if (wordW > available && textBuf) {
+                            flushLine();
+                        }
+
+                        if (isFirstLine && firstLineIndent && !textBuf) {
+                            lineStartX = x + firstLineIndent;
+                        }
+
+                        textBuf += word;
+                    }
+                }
+                flushLine();
+            };
+
+            for (let ci = 0; ci < chapterContents.length; ci++) {
+                const ch = chapterContents[ci];
+
+                // Chapter title page
+                addPage();
+                y = H / 2 - 20;
+
+                // Chapter number
+                pdf.setFontSize(12);
+                pdf.setFont("helvetica", "bold");
+                pdf.setTextColor(130);
+                pdf.text(`KAPITEL ${toRomanNumerals(ci + 1)}`, W / 2, y, { align: "center" });
+                y += 12;
+
+                // Decorative line
+                pdf.setDrawColor(180);
+                pdf.setLineWidth(0.3);
+                pdf.line(W / 2 - 15, y, W / 2 + 15, y);
+                y += 10;
+
+                // Title
+                pdf.setFontSize(22);
+                pdf.setFont("helvetica", "bold");
+                pdf.setTextColor(30);
+                const titleLines = pdf.splitTextToSize(ch.title, contentW - 20);
+                pdf.text(titleLines, W / 2, y, { align: "center" });
+                y += titleLines.length * 9 + 15;
+
+                // Bottom decorative line
+                pdf.setDrawColor(180);
+                pdf.line(W / 2 - 15, y, W / 2 + 15, y);
+
+                // Content page
+                addPage();
+                pdf.setTextColor(0);
+
+                // Header
+                pdf.setFontSize(9);
+                pdf.setFont("helvetica", "italic");
+                pdf.setTextColor(130);
+                pdf.text(`Kapitel ${ci + 1}`, marginLeft, y);
+                pdf.setTextColor(0);
+                y += 3;
+                pdf.setDrawColor(200);
+                pdf.setLineWidth(0.2);
+                pdf.line(marginLeft, y, W - marginRight, y);
+                y += 6;
+
+                // Drop cap for first paragraph
+                const blocks = parseHtml(ch.html);
+
+                for (let bi = 0; bi < blocks.length; bi++) {
+                    const block = blocks[bi];
+
+                    if (block.type === "hr") {
+                        needSpace(8);
+                        y += 2;
+                        pdf.setFontSize(14);
+                        pdf.setTextColor(180, 83, 9);
+                        pdf.text("❦", W / 2, y, { align: "center" });
+                        pdf.setTextColor(0);
+                        y += 6;
+                        continue;
+                    }
+
+                    if (block.type === "h1" || block.type === "h2" || block.type === "h3") {
+                        const sizes = { h1: 16, h2: 14, h3: 12 };
+                        const sz = sizes[block.type];
+                        needSpace(sz / 2.5 + paraSpacing + bodyLeading);
+                        y += sz / 5;
+                        pdf.setFontSize(sz);
+                        const text = block.runs.map(r => r.text).join("");
+                        pdf.splitTextToSize(text, contentW).forEach((line: string) => {
+                            needSpace(sz / 2.5);
+                            pdf.text(line, marginLeft, y);
+                            y += sz / 2.5;
+                        });
+                        y += paraSpacing;
+                        continue;
+                    }
+
+                    if (block.type === "quote") {
+                        const quoteX = marginLeft + 5;
+                        const quoteW = contentW - 10;
+                        pdf.setDrawColor(180, 83, 9);
+                        pdf.setLineWidth(0.6);
+                        needSpace(bodyLeading);
+                        pdf.line(marginLeft + 1.5, y - 3, marginLeft + 1.5, y + 5);
+                        pdf.setFontSize(bodySize - 1);
+                        pdf.setTextColor(80);
+                        renderRuns(block.runs, quoteX, quoteW, bodySize - 1, bodyLeading);
+                        pdf.setTextColor(0);
+                        y += paraSpacing;
+                        continue;
+                    }
+
+                    if (block.type === "li") {
+                        const bullet = block.ordered ? `${block.index}. ` : "•  ";
+                        const liX = marginLeft + 6;
+                        pdf.setFontSize(bodySize);
+                        pdf.setFont("helvetica", "normal");
+                        pdf.text(bullet, marginLeft, y);
+                        renderRuns(block.runs, liX, contentW - 6, bodySize, bodyLeading);
+                        y += 1;
+                        continue;
+                    }
+
+                    // Paragraph
+                    const isFirstParagraph = bi === 0 && block.type === "p";
+                    const doIndent = block.type === "p" && block.indent && !isFirstParagraph;
+                    renderRuns(block.runs, marginLeft, contentW, bodySize, bodyLeading, doIndent ? indentFirstLine : undefined);
+                    y += paraSpacing;
+                }
+            }
+
+            // Save
+            const fileName = `${slugify(bookTitle)}.pdf`;
+            pdf.save(fileName);
         } catch (error) {
-            console.error('PDF export failed:', error);
+            console.error("PDF export failed:", error);
         } finally {
-            setCurrentPage(originalPage);
             setIsExporting(false);
         }
     };
@@ -1058,67 +1385,68 @@ blockquote {
                 className
             )}
         >
-            {/* Fullscreen Toggle */}
-            <Button
-                variant="ghost"
-                size="icon"
-                className="absolute top-4 right-4 z-10"
-                onClick={() => setIsFullscreen(!isFullscreen)}
-            >
-                {isFullscreen ? (
-                    <Minimize2 className="h-5 w-5" />
-                ) : (
-                    <Maximize2 className="h-5 w-5" />
+            {/* Top-right buttons */}
+            <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
+                {onClose && (
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={onClose}
+                        className="gap-1.5"
+                    >
+                        <X className="h-4 w-4" />
+                        Schließen
+                    </Button>
                 )}
-            </Button>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setIsFullscreen(!isFullscreen)}
+                >
+                    {isFullscreen ? (
+                        <Minimize2 className="h-5 w-5" />
+                    ) : (
+                        <Maximize2 className="h-5 w-5" />
+                    )}
+                </Button>
+            </div>
 
-            {/* DOCX Export Button */}
-            <Button
-                variant="ghost"
-                size="icon"
-                className="absolute top-4 right-[8.5rem] z-10"
-                onClick={exportToDocx}
-                disabled={isExporting || isExportingEpub || isExportingDocx}
-                title="Als DOCX exportieren (für Lektoren)"
-            >
-                {isExportingDocx ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                    <FileText className="h-5 w-5" />
-                )}
-            </Button>
-
-            {/* EPUB Export Button */}
-            <Button
-                variant="ghost"
-                size="icon"
-                className="absolute top-4 right-24 z-10"
-                onClick={exportToEpub}
-                disabled={isExporting || isExportingEpub || isExportingDocx}
-                title="Als EPUB exportieren"
-            >
-                {isExportingEpub ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                    <Book className="h-5 w-5" />
-                )}
-            </Button>
-
-            {/* PDF Export Button */}
-            <Button
-                variant="ghost"
-                size="icon"
-                className="absolute top-4 right-14 z-10"
-                onClick={exportToPdf}
-                disabled={isExporting || isExportingEpub || isExportingDocx}
-                title="Als PDF exportieren"
-            >
-                {isExporting ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                    <Download className="h-5 w-5" />
-                )}
-            </Button>
+            {/* Export Dropdown */}
+            <div className="absolute top-4 right-14 z-10 flex items-center gap-2">
+                <DropdownMenu>
+                    <DropdownMenuTrigger
+                        className={cn(
+                            "inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium",
+                            "bg-primary text-primary-foreground shadow-md hover:bg-primary/90",
+                            "transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+                            "disabled:pointer-events-none disabled:opacity-50"
+                        )}
+                        disabled={isExporting || isExportingEpub || isExportingDocx}
+                    >
+                        {(isExporting || isExportingEpub || isExportingDocx) ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                            <Download className="h-4 w-4" />
+                        )}
+                        Export
+                        <ChevronDown className="h-4 w-4 opacity-70" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" sideOffset={4}>
+                        <DropdownMenuItem onClick={exportToPdf}>
+                            <Download className="h-4 w-4 mr-2" />
+                            PDF (A4)
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={exportToEpub}>
+                            <Book className="h-4 w-4 mr-2" />
+                            EPUB
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={exportToDocx}>
+                            <FileText className="h-4 w-4 mr-2" />
+                            DOCX
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
 
             {/* Book */}
             <div

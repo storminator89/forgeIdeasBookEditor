@@ -676,6 +676,7 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
                       content: "",
                       orderIndex: ch.orderIndex,
                     }))}
+                    onClose={() => setActiveTab("overview")}
                   />
                 </div>
               )}

@@ -1,6 +1,7 @@
 import prisma from "@bucherstellung/db";
 import { NextRequest } from "next/server";
 import { buildGenreInstructions } from "@/lib/ai/genre-prompts";
+import { fetchBookContext, formatContextForPrompt } from "@/lib/ai/fetch-book-context";
 
 type RouteContext = {
     params: Promise<{ bookId: string }>;
@@ -11,7 +12,7 @@ const ACTION_PROMPTS: Record<string, (text: string, context: string) => string> 
     rewrite: (text, context) => `Du bist ein kreativer Schriftsteller. Schreibe den folgenden Text um, behalte aber die Bedeutung bei. Mache ihn ausdrucksstärker und stilistisch besser.
 
 Kontext der Geschichte:
-${context.slice(0, 2000)}
+${context.slice(0, 50000)}
 
 Ursprünglicher Text:
 "${text}"
@@ -25,7 +26,7 @@ WICHTIG:
     expand: (text, context) => `Du bist ein kreativer Schriftsteller. Mache den folgenden Text ausführlicher und detaillierter. Füge Beschreibungen, Emotionen und Atmosphäre hinzu.
 
 Kontext der Geschichte:
-${context.slice(0, 2000)}
+${context.slice(0, 50000)}
 
 Ursprünglicher Text:
 "${text}"
@@ -40,7 +41,7 @@ WICHTIG:
     shorten: (text, context) => `Du bist ein präziser Schriftsteller. Kürze den folgenden Text, behalte aber die Kernaussagen bei. Mache ihn kompakter und direkter.
 
 Kontext der Geschichte:
-${context.slice(0, 2000)}
+${context.slice(0, 50000)}
 
 Ursprünglicher Text:
 "${text}"
@@ -57,13 +58,30 @@ Aktueller Text:
 "${text}"
 
 Kontext der Geschichte:
-${context.slice(0, 3000)}
+${context.slice(0, 50000)}
 
 WICHTIG:
 - Schreibe nahtlos weiter, ohne den letzten Satz zu wiederholen
 - Behalte den Stil und Tonfall bei
 - Entwickle die Handlung natürlich weiter
 - Antworte NUR mit dem neuen Text, ohne Erklärungen`,
+
+    improve_dialog: (text, context) => `Du bist ein Dialog-Experte und professioneller Schriftsteller. Verbessere den folgenden Dialog, damit er natürlicher, lebendiger und charakteristischer klingt.
+
+Kontext der Geschichte:
+${context.slice(0, 50000)}
+
+Ursprünglicher Text mit Dialog:
+"${text}"
+
+WICHTIG:
+- Jede Figur muss eine unverwechselbare Stimme haben
+- Nutze Subtext - was Charaktere SAGEN und was sie MEINEN kann unterschiedlich sein
+- Füge Handlungen, Gesten und Reaktionen zwischen den Dialogzeilen ein
+- Vermeide übermäßige Dialog-Tags (sagte, fragte) - nutze Handlungsbeschreibungen
+- Der Dialog soll realistisch und flüssig klingen
+- Behalte die inhaltliche Bedeutung bei
+- Antworte NUR mit dem verbesserten Text, ohne Erklärungen`,
 };
 
 // POST - Inline AI operations
@@ -76,12 +94,12 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         // Validate action
         if (!action || !ACTION_PROMPTS[action]) {
             return new Response(
-                JSON.stringify({ error: "Ungültige Aktion. Erlaubt: rewrite, expand, shorten, continue" }),
+                JSON.stringify({ error: "Ungültige Aktion. Erlaubt: rewrite, expand, shorten, continue, improve_dialog" }),
                 { status: 400, headers: { "Content-Type": "application/json" } }
             );
         }
 
-        // For non-continue actions, text is required
+        // For continue action, text is optional; all others require text
         if (action !== "continue" && !text) {
             return new Response(
                 JSON.stringify({ error: "Text ist erforderlich für diese Aktion" }),
@@ -101,18 +119,21 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
             );
         }
 
-        // Get book for genre context
-        const book = await prisma.book.findUnique({
-            where: { id: bookId },
-            select: { genre: true },
+        // Get full book context from server
+        const ctx = await fetchBookContext(bookId);
+        const genreInstructions = buildGenreInstructions(ctx.book.genre);
+        const fullStoryContext = formatContextForPrompt(ctx, {
+            includePreviousChapterContent: false, // Summaries only for inline operations
         });
 
-        // Build system prompt
-        const genreInstructions = buildGenreInstructions(book?.genre);
+        // Build system prompt with full context
         const systemPrompt = `Du bist ein professioneller Schriftsteller und Lektor.${genreInstructions}`;
 
+        // Merge server context with client-provided context (which contains current chapter content)
+        const mergedContext = fullStoryContext + (context ? `\n\nAKTUELLER KAPITELINHALT:\n${context}` : "");
+
         // Build user prompt based on action
-        const userPrompt = ACTION_PROMPTS[action](text || "", context || "");
+        const userPrompt = ACTION_PROMPTS[action](text || "", mergedContext);
 
         // Call AI API with streaming
         const requestBody = {
