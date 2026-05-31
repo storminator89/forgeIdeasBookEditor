@@ -371,117 +371,55 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
     <div className="flex h-screen overflow-hidden bg-background">
       {/* Background Decorations */}
       <div className="fixed inset-0 pointer-events-none z-0">
-        <div className="absolute top-[-10%] left-[-5%] w-[500px] h-[500px] rounded-full bg-primary/5 blur-[100px]" />
-        <div className="absolute bottom-[-10%] right-[-5%] w-[500px] h-[500px] rounded-full bg-secondary/10 blur-[100px]" />
+        <div className="ambient-glow-amber top-[-10%] left-[-5%] opacity-20" />
+        <div className="ambient-glow-violet bottom-[-10%] right-[-5%] opacity-15" />
       </div>
 
-      {/* Sidebar */}
-      <aside className="w-72 border-r border-border/50 bg-background/60 backdrop-blur-xl flex flex-col z-20 shadow-xl transition-all">
-        <div className="p-6 border-b border-border/50">
-          <Link
-            href={"/books" as Route}
-            className="inline-flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-primary transition-colors mb-6 group"
-          >
-            <ArrowLeft className="h-3 w-3 group-hover:-translate-x-1 transition-transform" />
-            {t({ de: "Zurück zur Bibliothek", en: "Back to library" })}
-          </Link>
-          <h2 className="font-serif font-bold text-xl tracking-tight text-foreground line-clamp-2 leading-tight">{book.title}</h2>
-          {book.genre && (
-            <span className="inline-flex items-center mt-3 px-2.5 py-1 rounded-full text-[10px] font-medium bg-secondary text-secondary-foreground border border-border/50">
-              {book.genre}
-            </span>
-          )}
-        </div>
+      {/* Immersive Floating macOS-style Navigation Dock */}
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-2xl border border-border/40 bg-card/75 dark:bg-card/45 backdrop-blur-2xl shadow-2xl px-5 py-2.5 flex items-center gap-3 transition-all duration-300 hover:shadow-primary/10 hover:border-primary/30">
+        
+        {/* Link back to library */}
+        <Link 
+          href={"/books" as Route} 
+          className="p-2.5 rounded-xl text-muted-foreground hover:text-primary hover:bg-secondary/45 transition-all select-none group" 
+          title={t({ de: "Zurück zur Bibliothek", en: "Back to library" })}
+        >
+          <ArrowLeft className="h-4.5 w-4.5 group-hover:-translate-x-0.5 transition-transform" />
+        </Link>
+        <div className="w-px h-6 bg-border/40" />
 
-        <nav className="flex-1 p-4 space-y-1.5 overflow-y-auto">
-          {tabs.map((tab) => {
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={cn(
-                  "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 group relative overflow-hidden",
-                  isActive
-                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
-                    : "text-muted-foreground hover:bg-secondary/80 hover:text-foreground",
-                )}
-              >
-                {isActive && <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent pointer-events-none" />}
-                <tab.icon
-                  className={cn(
-                    "h-4.5 w-4.5 transition-colors",
-                    isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground",
-                  )}
+        {/* Dynamic workspace tab triggers with magnetic scale */}
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "p-2.5 rounded-xl text-xs font-semibold font-serif transition-all duration-300 flex flex-col items-center justify-center gap-1 select-none relative cursor-pointer min-w-[56px] group",
+                isActive
+                  ? "text-primary scale-110 font-bold"
+                  : "text-muted-foreground hover:text-foreground hover:scale-105 hover:bg-secondary/45"
+              )}
+            >
+              <tab.icon className="h-4.5 w-4.5 transition-transform group-hover:scale-105" />
+              <span className="text-[9px] uppercase tracking-wider text-muted-foreground/80 scale-90 group-hover:scale-95 origin-center">{tab.label}</span>
+
+              {/* Active Golden Highlight Bar underneath */}
+              {isActive && (
+                <motion.div
+                  layoutId="active-dock-indicator"
+                  className="absolute -bottom-1 left-1/4 right-1/4 h-0.5 bg-primary rounded-full shadow-md shadow-primary/20 z-0 pointer-events-none"
+                  transition={{ type: "spring", stiffness: 100, damping: 15 }}
                 />
-                {tab.label}
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* Global Search */}
-        <div className="px-4 py-3 border-t border-border/50 bg-secondary/20">
-          <GlobalSearch
-            bookId={book.id}
-            onNavigateToChapter={(chapterId) => {
-              router.push(`/books/${book.id}/chapter/${chapterId}` as Route);
-            }}
-            onNavigateToTab={(tab, itemId) => {
-              setActiveTab(tab as Tab);
-              if (itemId) {
-                // Wait for tab switch then open modal
-                setTimeout(() => {
-                  if (tab === "characters") {
-                    const character = book.characters.find((c) => c.id === itemId);
-                    if (character) {
-                      setEditingCharacter(character as unknown as Character);
-                      setShowCharacterForm(true);
-                    }
-                  } else if (tab === "plot") {
-                    const plotPoint = book.plotPoints.find((p) => p.id === itemId);
-                    if (plotPoint) {
-                      setEditingPlotPoint(plotPoint);
-                      setShowPlotForm(true);
-                    }
-                  } else if (tab === "world") {
-                    const element = book.worldElements.find((e) => e.id === itemId);
-                    if (element) {
-                      setEditingWorldElement(element as unknown as WorldElement);
-                      setShowWorldForm(true);
-                    }
-                  }
-                }, 100);
-              }
-            }}
-          />
-        </div>
-
-        {/* Quick Stats */}
-        <div className="p-4 border-t border-border/50 space-y-3 text-xs text-muted-foreground bg-background/40">
-          <div className="flex justify-between items-center">
-            <span className="flex items-center gap-1.5">
-              <FileText className="h-3 w-3" /> {t({ de: "Kapitel", en: "Chapters" })}
-            </span>
-            <span className="font-medium text-foreground">{book.chapters.length}</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="flex items-center gap-1.5">
-              <Users className="h-3 w-3" /> {t({ de: "Charaktere", en: "Characters" })}
-            </span>
-            <span className="font-medium text-foreground">{book.characters.length}</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="flex items-center gap-1.5">
-              <Pencil className="h-3 w-3" /> {t({ de: "Wörter", en: "Words" })}
-            </span>
-            <span className="font-medium text-foreground">{new Intl.NumberFormat(intlLocale).format(totalWords)}</span>
-          </div>
-        </div>
-      </aside>
+              )}
+            </button>
+          );
+        })}
+      </div>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto relative z-10 scrollbar-hide">
+      <main className="flex-1 overflow-auto relative z-10 scrollbar-hide pb-28">
         <div className="relative p-8 md:p-10 max-w-6xl mx-auto min-h-screen">
           <AnimatePresence mode="wait">
             <motion.div
@@ -513,14 +451,14 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
 
               {activeTab === "characters" && (
                 <div className="space-y-6">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between border-b border-border/30 pb-4">
                     <div className="flex items-center gap-4">
-                      <h2 className="text-2xl font-bold font-serif">{t({ de: "Charaktere", en: "Characters" })}</h2>
-                      <div className="flex items-center bg-secondary/50 rounded-lg p-1 border border-border/50">
+                      <h2 className="text-3xl font-serif font-black tracking-tight text-foreground">{t({ de: "Charaktere", en: "Characters" })}</h2>
+                      <div className="flex items-center bg-secondary/50 rounded-xl p-1 border border-border/40">
                         <button
                           onClick={() => setCharacterViewMode("cards")}
                           className={cn(
-                            "p-1.5 rounded-md transition-all",
+                            "p-1.5 rounded-lg transition-all cursor-pointer",
                             characterViewMode === "cards" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground",
                           )}
                           title={t({ de: "Kartenansicht", en: "Card view" })}
@@ -530,7 +468,7 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
                         <button
                           onClick={() => setCharacterViewMode("graph")}
                           className={cn(
-                            "p-1.5 rounded-md transition-all",
+                            "p-1.5 rounded-lg transition-all cursor-pointer",
                             characterViewMode === "graph" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground",
                           )}
                           title={t({ de: "Beziehungs-Graph", en: "Relationship graph" })}
@@ -539,7 +477,7 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
                         </button>
                       </div>
                     </div>
-                    <Button onClick={() => setShowCharacterForm(true)} className="shadow-lg shadow-primary/20">
+                    <Button onClick={() => setShowCharacterForm(true)} className="rounded-xl shadow-md shadow-primary/10">
                       <Plus className="mr-2 h-4 w-4" />
                       {t({ de: "Neuer Charakter", en: "New character" })}
                     </Button>
@@ -549,7 +487,7 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
                   <CharacterAIPanel bookId={book.id} onCharacterCreated={handleCharacterSave} onCharacterUpdated={handleCharacterSave} />
 
                   {characterViewMode === "graph" ? (
-                    <Card className="h-[600px] overflow-hidden border-border/50 shadow-inner bg-card/30">
+                    <Card className="h-[600px] overflow-hidden border border-border/40 shadow-inner bg-card/25 rounded-2xl">
                       <CharacterRelationshipGraph characters={book.characters as any} onNodeClick={handleCharacterNodeClick} />
                     </Card>
                   ) : (
@@ -557,15 +495,18 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
                       {book.characters.map((character) => (
                         <Card
                           key={character.id}
-                          className="group cursor-pointer hover:shadow-xl hover:shadow-primary/5 hover:border-primary/50 transition-all duration-300 overflow-hidden bg-card/50 backdrop-blur-sm"
+                          className="group cursor-pointer hover:shadow-xl hover:shadow-primary/5 hover:border-primary/40 transition-all duration-300 overflow-hidden bg-card/50 backdrop-blur-sm border border-border/40 rounded-2xl flex flex-col justify-between paper-texture"
                           onClick={() => {
                             setEditingCharacter(character);
                             setShowCharacterForm(true);
                           }}
                         >
-                          <div className="flex h-full">
+                          <div className="flex h-full relative">
+                            {/* Binder left line */}
+                            <div className="book-binding-line" />
+
                             {/* Character Image Strip */}
-                            <div className="w-24 bg-secondary/50 relative overflow-hidden flex-shrink-0">
+                            <div className="w-22 bg-secondary/35 relative overflow-hidden flex-shrink-0 border-r border-border/20 pl-2">
                               {character.imageUrl ? (
                                 <img
                                   src={character.imageUrl}
@@ -573,27 +514,27 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
                                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                                 />
                               ) : (
-                                <div className="w-full h-full flex items-center justify-center bg-secondary">
-                                  <Users className="h-8 w-8 text-muted-foreground/30" />
+                                <div className="w-full h-full flex items-center justify-center bg-secondary/40">
+                                  <Users className="h-6 w-6 text-muted-foreground/20" />
                                 </div>
                               )}
-                              <div className="absolute inset-0 bg-gradient-to-r from-transparent to-card/50" />
+                              <div className="absolute inset-0 bg-gradient-to-r from-black/0 via-black/0 to-card/50" />
                             </div>
 
-                            <div className="flex-1 p-5 flex flex-col">
+                            <div className="flex-1 p-5 flex flex-col justify-between">
                               <div>
-                                <h3 className="font-bold text-lg group-hover:text-primary transition-colors">{character.name}</h3>
-                                <div className="text-sm font-medium text-muted-foreground mb-2">{character.role}</div>
-                                <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed">
+                                <h3 className="font-serif font-black text-base group-hover:text-primary transition-colors text-foreground line-clamp-1">{character.name}</h3>
+                                <div className="text-[10px] font-bold tracking-wider uppercase text-muted-foreground mb-2.5">{character.role}</div>
+                                <p className="text-xs font-serif text-muted-foreground line-clamp-3 leading-relaxed">
                                   {character.description || t({ de: "Keine Beschreibung", en: "No description" })}
                                 </p>
                               </div>
 
-                              <div className="mt-auto pt-4 flex gap-2 justify-end opacity-0 group-hover:opacity-100 transition-all transform translate-y-2 group-hover:translate-y-0">
+                              <div className="mt-4 pt-3 border-t border-border/30 flex gap-1.5 justify-end opacity-0 group-hover:opacity-100 transition-all transform translate-y-1.5 group-hover:translate-y-0">
                                 <Button
                                   size="icon"
                                   variant="secondary"
-                                  className="h-8 w-8 rounded-full"
+                                  className="h-7.5 w-7.5 rounded-lg border border-border bg-card/95 hover:bg-secondary"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setEditingRelationsCharacter(character as any);
@@ -601,12 +542,12 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
                                   }}
                                   title={t({ de: "Beziehungen bearbeiten", en: "Edit relationships" })}
                                 >
-                                  <Link2 className="h-3.5 w-3.5" />
+                                  <Link2 className="h-3.5 w-3.5 text-muted-foreground" />
                                 </Button>
                                 <Button
                                   size="icon"
                                   variant="ghost"
-                                  className="h-8 w-8 rounded-full text-destructive hover:bg-destructive/10"
+                                  className="h-7.5 w-7.5 rounded-lg text-destructive hover:bg-destructive/10"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleCharacterDelete(character.id);
@@ -620,7 +561,7 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
                         </Card>
                       ))}
                       {book.characters.length === 0 && (
-                        <div className="col-span-full py-12 text-center text-muted-foreground">
+                        <div className="col-span-full py-16 text-center rounded-2xl border border-dashed border-border/40 text-muted-foreground font-serif">
                           <p>{t({ de: "Erstelle deinen ersten Charakter", en: "Create your first character" })}</p>
                         </div>
                       )}

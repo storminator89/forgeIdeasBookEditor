@@ -76,8 +76,8 @@ function ToolbarButton({ onClick, isActive, disabled, children, title }: Toolbar
             disabled={disabled}
             title={title}
             className={cn(
-                "h-8 w-8 p-0",
-                isActive && "bg-accent text-accent-foreground"
+                "h-8 w-8 p-0 rounded-lg hover:bg-secondary/45 transition-colors cursor-pointer",
+                isActive && "bg-primary/10 text-primary border border-primary/10 hover:bg-primary/20 shadow-sm"
             )}
         >
             {children}
@@ -94,7 +94,7 @@ function Toolbar({ editor, onImageClick }: ToolbarProps) {
     if (!editor) return null;
 
     return (
-        <div className="flex flex-wrap items-center gap-0.5 border-b bg-muted/30 p-1">
+        <div className="flex flex-wrap items-center gap-1 border-b border-border/40 bg-secondary/15 p-2 rounded-t-2xl">
             {/* Undo/Redo */}
             <div className="flex items-center border-r pr-1 mr-1">
                 <ToolbarButton
@@ -390,10 +390,10 @@ export default function RichTextEditor({
         editorProps: {
             attributes: {
                 class: cn(
-                    "prose prose-sm dark:prose-invert max-w-none focus:outline-none min-h-[400px] p-4",
-                    "prose-headings:font-semibold prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg",
-                    "prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-blockquote:my-2",
-                    "prose-blockquote:border-l-2 prose-blockquote:border-primary prose-blockquote:pl-4 prose-blockquote:italic",
+                    "prose dark:prose-invert max-w-none focus:outline-none min-h-[420px] p-6 pl-2 py-8 font-serif leading-[1.8] tracking-[0.01em]",
+                    "prose-headings:font-bold prose-headings:font-serif prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl",
+                    "prose-p:my-5 prose-p:leading-[1.85] prose-ul:my-4 prose-ol:my-4 prose-blockquote:my-6",
+                    "prose-blockquote:border-l-2 prose-blockquote:border-primary/40 prose-blockquote:pl-5 prose-blockquote:italic prose-blockquote:bg-secondary/10 prose-blockquote:py-1",
                     "prose-strong:font-bold prose-em:italic",
                     "prose-img:rounded-lg prose-img:shadow-md prose-img:mx-auto",
                     editorClassName

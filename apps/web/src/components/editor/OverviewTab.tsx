@@ -278,16 +278,25 @@ export default function OverviewTab({
     const pendingLabel = pendingChapters === 1
         ? t({ de: "1 Kapitel wartet auf Inhalt", en: "1 chapter is waiting for content" })
         : t({ de: "{{count}} Kapitel warten auf Inhalt", en: "{{count}} chapters are waiting for content" }, { count: pendingChapters });
-
     return (
-        <div className="space-y-6">
+        <div className="space-y-8 animate-in fade-in duration-500">
             {/* Header Hero Section */}
-            <div className="relative overflow-hidden rounded-2xl border bg-card text-card-foreground shadow-sm">
-                <div className="absolute inset-0 pointer-events-none opacity-10 bg-gradient-to-br from-primary via-transparent to-chart-3" />
+            <div className="relative overflow-hidden rounded-2xl border border-border/40 bg-card/60 dark:bg-card/35 backdrop-blur-md shadow-xl paper-texture">
+                {/* Candlelight Pulsing Ambience */}
+                <div className="absolute inset-0 pointer-events-none opacity-20 bg-gradient-to-tr from-primary/10 via-transparent to-primary/5" />
+                <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary/35 via-primary/80 to-primary/35 rounded-l-full" />
 
-                <div className="relative p-6 md:p-8 flex flex-col md:flex-row gap-8">
-                    {/* Cover Preview (Interactive) */}
-                    <div className="flex-shrink-0 group relative w-32 md:w-40 aspect-[2/3] bg-muted rounded-lg shadow-md overflow-hidden border">
+                <div className="relative p-6 md:p-8 flex flex-col md:flex-row gap-8 items-center md:items-start">
+                    {/* Cover Preview (Tactile 3D notebook) */}
+                    <motion.div
+                        whileHover={{ y: -6, rotateY: -6, rotateX: 2, scale: 1.025 }}
+                        transition={{ type: "spring", stiffness: 140, damping: 14 }}
+                        className="flex-shrink-0 group relative w-36 md:w-40 aspect-[2/3] bg-background rounded-lg shadow-xl overflow-hidden border border-border/30 cursor-pointer [transform-style:preserve-3d] [perspective:1000px]"
+                    >
+                        {/* Book Binding Edge Spine Accent */}
+                        <div className="absolute left-0 top-0 bottom-0 w-2 bg-black/25 dark:bg-black/35 border-r border-white/5 z-10" />
+                        <div className="absolute left-2 top-0 bottom-0 w-[1px] bg-white/10 z-10" />
+
                         {book.coverUrl ? (
                             <img
                                 src={book.coverUrl}
@@ -295,13 +304,14 @@ export default function OverviewTab({
                                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                             />
                         ) : (
-                            <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20">
-                                <div className="text-3xl text-amber-400/60 mb-2">?</div>
+                            <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center bg-gradient-to-br from-amber-500/10 to-orange-500/10">
+                                <div className="text-3xl text-primary/40 font-serif font-black mb-2 select-none">🕮</div>
+                                <span className="text-[9px] uppercase tracking-widest font-black text-muted-foreground/40">{t({ de: "Kein Cover", en: "No Cover" })}</span>
                             </div>
                         )}
 
                         {/* Hover Overlay for Upload */}
-                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+                        <div className="absolute inset-0 bg-black/75 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center gap-2 z-20">
                             <input
                                 ref={coverInputRef}
                                 type="file"
@@ -313,18 +323,18 @@ export default function OverviewTab({
                             <Button
                                 size="sm"
                                 variant="secondary"
-                                className="h-8 text-xs"
+                                className="h-8 text-[10px] font-serif uppercase tracking-wider rounded-lg"
                                 onClick={() => coverInputRef.current?.click()}
                                 disabled={isUploadingCover}
                             >
-                                {isUploadingCover ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3 mr-1" />}
+                                {isUploadingCover ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3 mr-1 text-primary" />}
                                 {t({ de: "Cover", en: "Cover" })}
                             </Button>
                             {book.coverUrl && (
                                 <Button
                                     size="sm"
                                     variant="destructive"
-                                    className="h-8 text-xs"
+                                    className="h-8 text-[10px] font-serif uppercase tracking-wider rounded-lg"
                                     onClick={handleRemoveCover}
                                 >
                                     <Trash2 className="h-3 w-3 mr-1" />
@@ -332,11 +342,11 @@ export default function OverviewTab({
                                 </Button>
                             )}
                         </div>
-                    </div>
+                    </motion.div>
 
                     {/* Meta Data */}
-                    <div className="flex-1 space-y-4">
-                        <div className="flex items-start justify-between">
+                    <div className="flex-1 space-y-4 text-center md:text-left">
+                        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                             <div className="flex-1 space-y-2">
                                 {isEditingBook ? (
                                     <div className="space-y-3 max-w-xl animate-in fade-in slide-in-from-top-2">
@@ -344,31 +354,32 @@ export default function OverviewTab({
                                             value={editTitle}
                                             onChange={(e) => setEditTitle(e.target.value)}
                                             placeholder={t({ de: "Buchtitel", en: "Book title" })}
-                                            className="text-2xl md:text-3xl font-bold h-auto py-2 px-3 bg-background/50 backdrop-blur"
+                                            className="text-xl font-serif font-bold h-auto py-2 px-3 bg-background/55 border-border/40 rounded-xl"
                                         />
                                         <Input
                                             value={editAuthor}
                                             onChange={(e) => setEditAuthor(e.target.value)}
                                             placeholder={t({ de: "Autor (optional)", en: "Author (optional)" })}
-                                            className="text-lg h-auto py-2 px-3 bg-background/50 backdrop-blur"
+                                            className="text-sm font-serif h-auto py-2 px-3 bg-background/55 border-border/40 rounded-xl"
                                         />
                                         <textarea
                                             value={editDescription}
                                             onChange={(e) => setEditDescription(e.target.value)}
                                             placeholder={t({ de: "Beschreibung (optional)", en: "Description (optional)" })}
                                             rows={3}
-                                            className="w-full px-3 py-2 rounded-md border border-input bg-background/50 backdrop-blur text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                                            className="w-full px-3 py-2 rounded-xl border border-border/40 bg-background/55 text-xs font-serif resize-none focus:outline-none focus:ring-2 focus:ring-primary/40 leading-relaxed"
                                         />
-                                        <div className="flex gap-2 pt-2">
+                                        <div className="flex gap-2 justify-center md:justify-start pt-1">
                                             <Button
                                                 size="sm"
                                                 onClick={handleSaveBookDetails}
                                                 disabled={isSavingBook || !editTitle.trim()}
+                                                className="rounded-lg h-8 text-[11px] font-serif uppercase tracking-wider bg-primary text-primary-foreground"
                                             >
                                                 {isSavingBook ? (
-                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                                                 ) : (
-                                                    <Check className="mr-2 h-4 w-4" />
+                                                    <Check className="mr-1.5 h-3.5 w-3.5" />
                                                 )}
                                                 {t({ de: "Speichern", en: "Save" })}
                                             </Button>
@@ -377,43 +388,51 @@ export default function OverviewTab({
                                                 size="sm"
                                                 onClick={handleCancelEditBook}
                                                 disabled={isSavingBook}
+                                                className="rounded-lg h-8 text-[11px] font-serif uppercase tracking-wider border-border/55"
                                             >
-                                                <X className="mr-2 h-4 w-4" />
+                                                <X className="mr-1.5 h-3.5 w-3.5" />
                                                 {t({ de: "Abbrechen", en: "Cancel" })}
                                             </Button>
                                         </div>
                                     </div>
                                 ) : (
                                     <div className="group">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <h1 className="text-3xl md:text-4xl font-serif font-bold tracking-tight text-foreground">{book.title}</h1>
+                                        <div className="flex items-center justify-center md:justify-start gap-2 mb-1">
+                                            <h1 className="text-2xl md:text-3xl font-serif font-black tracking-tight text-foreground">{book.title}</h1>
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
-                                                className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity rounded-full hover:bg-secondary/45"
                                                 onClick={() => setIsEditingBook(true)}
                                             >
-                                                <Pencil className="h-4 w-4 text-muted-foreground" />
+                                                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                                             </Button>
                                         </div>
                                         {book.author && (
-                                            <div className="text-lg text-muted-foreground font-medium mb-3">
+                                            <div className="text-sm text-primary font-serif font-medium tracking-wide mb-3 uppercase">
                                                 {t({ de: "von", en: "by" })} {book.author}
                                             </div>
                                         )}
                                         {book.description && (
-                                            <p className="text-muted-foreground max-w-2xl leading-relaxed">{book.description}</p>
+                                            <p className="text-xs font-serif text-muted-foreground max-w-2xl leading-relaxed italic border-l-2 border-border/30 pl-4 py-1 text-left">
+                                                {book.description}
+                                            </p>
                                         )}
                                     </div>
                                 )}
                             </div>
 
                             {!isEditingBook && (
-                                <Button size="lg" onClick={handleCreateChapter} disabled={isCreatingChapter} className="shadow-lg shadow-primary/20">
+                                <Button 
+                                    size="lg" 
+                                    onClick={handleCreateChapter} 
+                                    disabled={isCreatingChapter} 
+                                    className="shadow-lg shadow-primary/10 rounded-xl h-11 px-5 text-xs font-serif font-bold uppercase tracking-wider cursor-pointer"
+                                >
                                     {isCreatingChapter ? (
-                                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                     ) : (
-                                        <Plus className="mr-2 h-5 w-5" />
+                                        <Plus className="mr-2 h-4 w-4 text-white" />
                                     )}
                                     {t({ de: "Neues Kapitel", en: "New chapter" })}
                                 </Button>
@@ -422,7 +441,7 @@ export default function OverviewTab({
 
                         {/* Quick Toggles */}
                         {book.coverUrl && isEditingBook && (
-                            <div className="flex items-center gap-2 mt-2">
+                            <div className="flex items-center justify-center md:justify-start gap-2 mt-2">
                                 <input
                                     type="checkbox"
                                     id="hide-cover-text"
@@ -442,9 +461,9 @@ export default function OverviewTab({
                                             console.error("Error updating hideCoverText:", error);
                                         }
                                     }}
-                                    className="h-4 w-4 rounded border-gray-300"
+                                    className="h-3.5 w-3.5 rounded border-border/40 focus:ring-primary/45"
                                 />
-                                <Label htmlFor="hide-cover-text" className="text-sm cursor-pointer text-muted-foreground">
+                                <Label htmlFor="hide-cover-text" className="text-[11px] font-serif cursor-pointer text-muted-foreground">
                                     {t({ de: "Titel & Autor auf Cover ausblenden", en: "Hide title & author on cover" })}
                                 </Label>
                             </div>
@@ -454,55 +473,68 @@ export default function OverviewTab({
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4.5">
                 {stats.map((stat) => (
-                    <Card key={stat.label} className="bg-card/50 backdrop-blur-sm border-white/5 hover:border-white/10 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1">
-                        <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
-                            <CardDescription className="text-sm font-medium">{stat.label}</CardDescription>
-                            <div className={cn("p-2 rounded-full backdrop-blur-md", stat.bg)}>
+                    <Card key={stat.label} className="relative bg-card/45 dark:bg-card/25 backdrop-blur-md border border-border/40 hover:border-primary/40 shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden group paper-texture">
+                        {/* Ambient Pulsing hover element */}
+                        <div className="absolute -right-8 -top-8 w-24 h-24 bg-primary/5 rounded-full blur-xl group-hover:bg-primary/10 transition-colors duration-500" />
+                        <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-transparent group-hover:bg-primary/50 transition-colors duration-300" />
+                        
+                        <CardHeader className="pb-2.5 flex flex-row items-center justify-between space-y-0 relative z-10">
+                            <CardDescription className="text-[11px] font-serif font-black uppercase tracking-wider text-muted-foreground/80">{stat.label}</CardDescription>
+                            <div className={cn("p-2 rounded-xl backdrop-blur-md border border-border/20 shadow-sm transition-all duration-300 group-hover:scale-105", stat.bg)}>
                                 <stat.icon className={cn("h-4 w-4", stat.color)} />
                             </div>
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold tracking-tight">{stat.value}</div>
+                        <CardContent className="relative z-10">
+                            <div className="text-2xl font-serif font-black tracking-tight text-foreground">{stat.value}</div>
                         </CardContent>
                     </Card>
                 ))}
             </div>
 
             {/* AI Status & Batch Generation */}
-            <Card className="bg-gradient-to-br from-chart-1/5 to-chart-3/5 border-chart-3/10 shadow-md">
-                <CardContent className="py-6 space-y-6">
-                    <div className="flex items-center gap-4">
-                        <div className="p-3 rounded-full bg-chart-3/10 ring-1 ring-chart-3/20">
-                            <Sparkles className="h-6 w-6 text-chart-3" />
+            <Card className="relative overflow-hidden bg-card/45 dark:bg-card/25 backdrop-blur-md border border-border/40 shadow-lg paper-texture">
+                <div className="absolute -left-16 -bottom-16 w-32 h-32 bg-primary/5 rounded-full blur-2xl pointer-events-none" />
+                <div className="absolute -right-16 -top-16 w-32 h-32 bg-primary/5 rounded-full blur-2xl pointer-events-none" />
+                
+                <CardContent className="py-6 space-y-6 relative z-10">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex items-start gap-4">
+                            <div className="p-3 rounded-xl bg-primary/10 border border-primary/20 shadow-sm flex-shrink-0 animate-pulse">
+                                <Sparkles className="h-5 w-5 text-primary" />
+                            </div>
+                            <div className="space-y-1">
+                                <h3 className="text-sm font-serif font-black text-foreground">{t({ de: "KI-Co-Autor", en: "AI Co-Author" })}</h3>
+                                <p className="text-xs font-serif text-muted-foreground leading-relaxed">
+                                    {book.aiSettings?.apiKey
+                                        ? t({
+                                            de: "Aktiviert und bereit auf dem Modell {{model}}.",
+                                            en: "Activated and running on model {{model}}.",
+                                        }, { model: book.aiSettings.model })
+                                        : t({
+                                            de: "Noch nicht konfiguriert. Aktiviere deinen Schreibpartner in den Einstellungen.",
+                                            en: "Not configured yet. Enable your co-author helper in settings.",
+                                        })}
+                                </p>
+                            </div>
                         </div>
-                        <div className="flex-1">
-                            <h3 className="text-lg font-semibold">{t({ de: "KI-Assistent", en: "AI assistant" })}</h3>
-                            <p className="text-sm text-muted-foreground">
-                                {book.aiSettings?.apiKey
-                                    ? t({
-                                        de: "Aktiv ({{model}}) - Dein Co-Autor ist bereit.",
-                                        en: "Active ({{model}}) - your co-author is ready.",
-                                    }, { model: book.aiSettings.model })
-                                    : t({
-                                        de: "Noch nicht konfiguriert. Aktiviere die KI, um Schreibblockaden zu lösen.",
-                                        en: "Not configured yet. Enable AI to break writer's block.",
-                                    })}
-                            </p>
-                        </div>
-                        <Button variant="outline" onClick={() => setActiveTab("settings")}>
+                        <Button 
+                            variant="outline" 
+                            onClick={() => setActiveTab("settings")}
+                            className="rounded-lg h-9 text-xs font-serif uppercase tracking-wider border-border/50 hover:bg-secondary/45"
+                        >
                             {t({ de: "Einstellungen", en: "Settings" })}
                         </Button>
                     </div>
 
                     {/* Batch Generation Button */}
                     {book.chapters.length > 0 && book.aiSettings?.apiKey && (
-                        <div className="border-t pt-6">
-                            <div className="flex items-center justify-between mb-2">
-                                <div>
-                                    <h4 className="font-medium">{t({ de: "Inhalts-Generator", en: "Content generator" })}</h4>
-                                    <p className="text-sm text-muted-foreground">
+                        <div className="border-t border-border/30 pt-6">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <div className="space-y-1">
+                                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t({ de: "Inhalts-Generator", en: "Content generator" })}</h4>
+                                    <p className="text-xs font-serif text-muted-foreground italic">
                                         {isGeneratingAll
                                             ? t({
                                                 de: "Generiere Kapitel {{current}} von {{total}}...",
@@ -514,25 +546,25 @@ export default function OverviewTab({
                                 <Button
                                     onClick={handleGenerateAllChapters}
                                     disabled={isGeneratingAll || pendingChapters === 0}
-                                    className="bg-chart-3 text-white hover:bg-chart-3/90"
+                                    className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-md shadow-primary/10 rounded-xl h-10 px-4 text-xs font-serif font-bold uppercase tracking-wider cursor-pointer"
                                 >
                                     {isGeneratingAll ? (
                                         <>
-                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
                                             {generationProgress}/{generationTotal}
                                         </>
                                     ) : (
                                         <>
-                                            <Sparkles className="mr-2 h-4 w-4" />
+                                            <Sparkles className="mr-2 h-3.5 w-3.5 text-white animate-pulse" />
                                             {t({ de: "Alle generieren", en: "Generate all" })}
                                         </>
                                     )}
                                 </Button>
                             </div>
                             {isGeneratingAll && (
-                                <div className="mt-4 h-2 bg-secondary rounded-full overflow-hidden">
+                                <div className="mt-4 h-1.5 bg-secondary/50 rounded-full overflow-hidden border border-border/20">
                                     <div
-                                        className="h-full bg-chart-3 transition-all duration-300"
+                                        className="h-full bg-gradient-to-r from-primary/80 to-primary transition-all duration-300 rounded-full"
                                         style={{ width: `${(generationProgress / generationTotal) * 100}%` }}
                                     />
                                 </div>
@@ -543,15 +575,17 @@ export default function OverviewTab({
             </Card>
 
             {/* Consistency Check */}
-            <ConsistencyCheckPanel
-                bookId={book.id}
-                onNavigateToChapter={(chapterIndex) => {
-                    const chapter = book.chapters[chapterIndex];
-                    if (chapter) {
-                        router.push(`/books/${book.id}/chapter/${chapter.id}` as Route);
-                    }
-                }}
-            />
+            <div className="relative overflow-hidden rounded-2xl border border-border/40 bg-card/35 backdrop-blur-md shadow-md paper-texture p-1">
+                <ConsistencyCheckPanel
+                    bookId={book.id}
+                    onNavigateToChapter={(chapterIndex) => {
+                        const chapter = book.chapters[chapterIndex];
+                        if (chapter) {
+                            router.push(`/books/${book.id}/chapter/${chapter.id}` as Route);
+                        }
+                    }}
+                />
+            </div>
         </div>
     );
 }

@@ -60,17 +60,38 @@ export default async function ChapterEditorPage({ params }: PageProps) {
         prisma.character.findMany({
             where: { bookId },
             orderBy: { name: "asc" },
-            select: { id: true, name: true, role: true },
+            select: { 
+                id: true, 
+                name: true, 
+                role: true, 
+                description: true, 
+                personality: true,
+                backstory: true,
+                appearance: true,
+                motivation: true,
+                imageUrl: true
+            },
         }),
         prisma.plotPoint.findMany({
             where: { bookId },
             orderBy: { orderIndex: "asc" },
-            select: { id: true, title: true, type: true },
+            select: { 
+                id: true, 
+                title: true, 
+                type: true,
+                description: true
+            },
         }),
         prisma.worldElement.findMany({
             where: { bookId },
             orderBy: { name: "asc" },
-            select: { id: true, name: true, type: true },
+            select: { 
+                id: true, 
+                name: true, 
+                type: true,
+                description: true,
+                imageUrl: true
+            },
         }),
         prisma.chapter.findMany({
             where: { bookId },
