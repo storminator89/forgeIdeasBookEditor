@@ -21,6 +21,9 @@ import {
   Maximize2,
   Minimize2,
   Wand2,
+  History,
+  Download,
+  List,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -40,6 +43,11 @@ import RichTextEditor, {
 import AdvancedAIPanel from "@/components/editor/AdvancedAIPanel";
 import { useI18n } from "@/components/locale-provider";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import ChapterHistoryDialog from "@/components/editor/ChapterHistoryDialog";
+import ChapterSwitcher from "@/components/editor/ChapterSwitcher";
+import { manuscriptText } from "@/lib/text-statistics";
+import type { ChapterDraft } from "@/lib/chapter-history";
 import { motion, AnimatePresence } from "framer-motion";
 
 type AISettings = {
@@ -216,6 +224,25 @@ export default function ChapterEditorView({
 
   // Focus mode state
   const [isFocusMode, setIsFocusMode] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [showChapterSwitcher, setShowChapterSwitcher] = useState(false);
+  const applyDraft = (draft: ChapterDraft) => {
+    setTitle(draft.title);
+    setContent(draft.content);
+    setSummary(draft.summary);
+    setNotes(draft.notes);
+    setStatus(draft.status);
+  };
+  useEffect(() => {
+    if (!isFocusMode) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.dataset.writingFocus = "true";
+    document.body.style.overflow = "hidden";
+    return () => {
+      delete document.body.dataset.writingFocus;
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isFocusMode]);
 
   // Calculate text statistics
   const stats = getTextStatistics(content);
@@ -229,13 +256,30 @@ export default function ChapterEditorView({
   // ESC key to exit focus mode
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isFocusMode) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setShowChapterSwitcher(true);
+      }
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        e.shiftKey &&
+        e.key.toLowerCase() === "f"
+      ) {
+        e.preventDefault();
+        setIsFocusMode((focus) => !focus);
+      }
+      if (
+        e.key === "Escape" &&
+        isFocusMode &&
+        !showHistory &&
+        !showChapterSwitcher
+      ) {
         setIsFocusMode(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isFocusMode]);
+  }, [isFocusMode, showHistory, showChapterSwitcher]);
 
   const {
     saveChapter,
@@ -259,14 +303,51 @@ export default function ChapterEditorView({
       status: chapter.status,
     },
     initialWordCount: chapter.wordCount,
-    onRestore: (draft) => {
-      setTitle(draft.title);
-      setContent(draft.content);
-      setSummary(draft.summary);
-      setNotes(draft.notes);
-      setStatus(draft.status);
-    },
+    onRestore: applyDraft,
   });
+
+  const navigateTo = async (href: string): Promise<boolean> => {
+    if (isGenerating || isStreaming || recovery) {
+      toast.error(
+        t({
+          de: "Beende zuerst die Generierung oder entscheide über den lokalen Entwurf.",
+          en: "Finish generation or resolve the local draft first.",
+        }),
+      );
+      return false;
+    }
+    if (!(await saveChapter())) {
+      toast.error(
+        t({
+          de: "Wechsel angehalten: Änderungen konnten nicht gespeichert werden.",
+          en: "Navigation paused: your changes could not be saved.",
+        }),
+      );
+      return false;
+    }
+    router.push(href as Route);
+    return true;
+  };
+  const downloadChapter = () => {
+    const blob = new Blob([`${title}\n\n${manuscriptText(content)}\n`], {
+      type: "text/plain;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${title.replace(/[\\/:*?"<>|]/g, "-").slice(0, 100) || "Kapitel"}.txt`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  const followSavedLink = (
+    event: React.MouseEvent<HTMLAnchorElement>,
+    href: string,
+  ) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+      return;
+    event.preventDefault();
+    void navigateTo(href);
+  };
 
   const handleGenerateText = async () => {
     // Allow generation without prompt if summary exists and useSummaryAsPrompt is true
@@ -513,12 +594,22 @@ export default function ChapterEditorView({
     }
 
     try {
-      await fetch(`/api/books/${chapter.bookId}/chapters/${chapter.id}`, {
-        method: "DELETE",
-      });
+      const response = await fetch(
+        `/api/books/${chapter.bookId}/chapters/${chapter.id}`,
+        {
+          method: "DELETE",
+        },
+      );
+      if (!response.ok) throw new Error("Delete failed");
       router.push(`/books/${chapter.bookId}` as Route);
     } catch (error) {
       console.error("Error deleting chapter:", error);
+      toast.error(
+        t({
+          de: "Kapitel konnte nicht gelöscht werden.",
+          en: "Could not delete chapter.",
+        }),
+      );
     }
   };
 
@@ -532,12 +623,14 @@ export default function ChapterEditorView({
 
   return (
     <div
-      className={`chapter-writing-view flex h-full min-h-0 transition-all duration-500 relative ${isFocusMode ? "bg-background " : "bg-background/10"}`}
+      className={`chapter-writing-view flex h-full min-h-0 transition-all duration-500 relative ${isFocusMode ? "chapter-focus-mode bg-background" : "bg-background/10"}`}
     >
       {/* Main Editor */}
       <div className="chapter-writing-main flex-1 min-w-0 min-h-0 flex flex-col relative z-10">
         {/* Header - Hidden in Focus Mode */}
         <header
+          inert={isFocusMode}
+          aria-hidden={isFocusMode}
           className={`chapter-writing-header border-b border-border/40 bg-card/65 dark:bg-card/45 backdrop-blur-md px-6 py-4 flex items-center justify-between transition-all duration-500 ${
             isFocusMode
               ? "opacity-0 h-0 overflow-hidden py-0 border-none pointer-events-none"
@@ -547,15 +640,26 @@ export default function ChapterEditorView({
           <div className="chapter-writing-breadcrumb flex items-center gap-4">
             <Link
               href={`/books/${chapter.bookId}` as Route}
+              onClick={(event) =>
+                followSavedLink(event, `/books/${chapter.bookId}`)
+              }
               className="flex items-center gap-2.5 text-xs font-sans font-bold text-muted-foreground hover:text-primary transition-colors group"
             >
               <ArrowLeft className="h-4 w-4 group-hover:-translate-x-0.5 transition-transform" />
               {chapter.book.title}
             </Link>
             <div className="h-4 w-px bg-border/40" />
-            <span className="text-xs font-sans font-semibold text-muted-foreground">
+            <button
+              onClick={() => setShowChapterSwitcher(true)}
+              className="text-xs font-sans font-semibold text-muted-foreground hover:text-foreground rounded-lg px-2 py-1"
+              aria-label={t({ de: "Kapitel wechseln", en: "Switch chapter" })}
+              title={t({
+                de: "Kapitel wechseln (Strg/⌘ + K)",
+                en: "Switch chapter (Ctrl/⌘ + K)",
+              })}
+            >
               {t({ de: "Kapitel", en: "Chapter" })} {chapter.orderIndex + 1}
-            </span>
+            </button>
           </div>
 
           <div className="chapter-writing-actions flex items-center gap-2">
@@ -611,7 +715,7 @@ export default function ChapterEditorView({
               }}
               className="rounded-xl h-9.5 text-xs font-semibold px-4 border-border/40"
             >
-              <Sparkles className="h-4 w-4 text-chart-1 animate-pulse" />
+              <Sparkles className="h-4 w-4 text-chart-1" />
               <span className="ml-2 hidden sm:inline">
                 {t({ de: "KI-Assistent", en: "AI Assistant" })}
               </span>
@@ -634,7 +738,14 @@ export default function ChapterEditorView({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setIsFocusMode(true)}
+              aria-label={t({
+                de: "Fokusmodus starten",
+                en: "Enter focus mode",
+              })}
+              onClick={() => {
+                setIsFocusMode(true);
+                editorRef.current?.focus();
+              }}
               title={t({
                 de: "Fokus-Modus (ESC zum Beenden)",
                 en: "Focus mode (ESC to exit)",
@@ -658,6 +769,21 @@ export default function ChapterEditorView({
                 align="end"
                 className="rounded-xl border-border/40 shadow-xl"
               >
+                <DropdownMenuItem onClick={() => setShowChapterSwitcher(true)}>
+                  <List className="h-4 w-4 mr-2" />
+                  {t({ de: "Kapitel wechseln", en: "Switch chapter" })}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setShowHistory(true)}>
+                  <History className="h-4 w-4 mr-2" />
+                  {t({ de: "Textstände", en: "Snapshots" })}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={downloadChapter}>
+                  <Download className="h-4 w-4 mr-2" />
+                  {t({
+                    de: "Kapitel als Text herunterladen",
+                    en: "Download chapter as text",
+                  })}
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive rounded-lg text-xs"
                   onClick={handleDelete}
@@ -700,12 +826,12 @@ export default function ChapterEditorView({
           <div
             className={`chapter-writing-sheet max-w-3xl mx-auto space-y-8 p-5 sm:p-8 md:p-12 rounded-3xl transition-all duration-500 ${
               isFocusMode
-                ? "bg-card/90 dark:bg-card/75 shadow-2xl border border-border/30 max-w-2xl mt-4"
+                ? "max-w-2xl mt-4"
                 : "bg-card border border-border/30 shadow-md"
             }  relative`}
           >
             {/* Binder line indicator on typewriter page */}
-            <div className="absolute top-0 bottom-0 left-0 w-2.5 bg-gradient-to-r from-black/[0.04] to-transparent border-r border-black/[0.02]" />
+            <div className="chapter-sheet-binding absolute top-0 bottom-0 left-0 w-2.5 bg-gradient-to-r from-black/[0.04] to-transparent border-r border-black/[0.02]" />
 
             {/* Title */}
             <Input
@@ -726,11 +852,17 @@ export default function ChapterEditorView({
                   en: "Start writing...",
                 })}
                 bookId={chapter.bookId}
+                hideToolbar={isFocusMode}
+                className={
+                  isFocusMode ? "border-none bg-transparent" : undefined
+                }
               />
             </div>
 
             {/* Summary - Hidden in Focus Mode */}
             <div
+              inert={isFocusMode}
+              aria-hidden={isFocusMode}
               className={`space-y-3 pt-6 border-t border-border/30 pl-4 transition-all duration-500 ${
                 isFocusMode
                   ? "opacity-0 h-0 overflow-hidden pt-0 border-none pointer-events-none"
@@ -756,6 +888,8 @@ export default function ChapterEditorView({
 
             {/* Notes - Hidden in Focus Mode */}
             <div
+              inert={isFocusMode}
+              aria-hidden={isFocusMode}
               className={`space-y-3 pl-4 transition-all duration-500 ${isFocusMode ? "opacity-0 h-0 overflow-hidden pointer-events-none" : "opacity-100"}`}
             >
               <label className="text-[10px] font-bold tracking-wider uppercase text-muted-foreground font-sans">
@@ -776,6 +910,8 @@ export default function ChapterEditorView({
 
         {/* Footer - Hidden in Focus Mode */}
         <footer
+          inert={isFocusMode}
+          aria-hidden={isFocusMode}
           className={`chapter-writing-footer border-t border-border/40 bg-card/65 dark:bg-card/45 backdrop-blur-md px-6 py-4 flex items-center justify-between transition-all duration-500 ${
             isFocusMode
               ? "opacity-0 h-0 overflow-hidden py-0 border-none pointer-events-none"
@@ -855,6 +991,12 @@ export default function ChapterEditorView({
                 href={
                   `/books/${chapter.bookId}/chapter/${prevChapter.id}` as Route
                 }
+                onClick={(event) =>
+                  followSavedLink(
+                    event,
+                    `/books/${chapter.bookId}/chapter/${prevChapter.id}`,
+                  )
+                }
               >
                 <Button
                   variant="ghost"
@@ -871,6 +1013,12 @@ export default function ChapterEditorView({
                 href={
                   `/books/${chapter.bookId}/chapter/${nextChapter.id}` as Route
                 }
+                onClick={(event) =>
+                  followSavedLink(
+                    event,
+                    `/books/${chapter.bookId}/chapter/${nextChapter.id}`,
+                  )
+                }
               >
                 <Button
                   variant="ghost"
@@ -885,44 +1033,66 @@ export default function ChapterEditorView({
           </div>
         </footer>
 
-        {/* Focus Mode Floating Controls */}
         {isFocusMode && (
-          <div className="chapter-focus-controls fixed bottom-6 right-6 flex flex-col items-end gap-3 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* Stats badge */}
-            <div className="bg-card/90 dark:bg-card/75 backdrop-blur-sm border rounded-xl p-4.5 shadow-2xl text-xs text-muted-foreground flex flex-col gap-2.5 min-w-[200px] ">
-              <div className="flex justify-between items-center font-sans">
-                <span>{t({ de: "Wörter", en: "Words" })}</span>
-                <span className="font-bold text-foreground font-mono">
-                  {stats.wordCount.toLocaleString(intlLocale)}
-                </span>
-              </div>
-              <div className="flex justify-between items-center font-sans">
-                <span>{t({ de: "Zeichen", en: "Characters" })}</span>
-                <span className="font-bold text-foreground font-mono">
-                  {stats.characterCount.toLocaleString(intlLocale)}
-                </span>
-              </div>
-              <div className="flex justify-between items-center font-sans">
-                <span>{t({ de: "Lesezeit", en: "Reading time" })}</span>
-                <span className="font-bold text-foreground font-mono">
-                  ~{stats.readingTime} {t({ de: "Min.", en: "min" })}
-                </span>
-              </div>
-            </div>
-            {/* Exit focus mode button */}
+          <div className="chapter-focus-bar">
+            <span>
+              {stats.wordCount.toLocaleString(intlLocale)}{" "}
+              {t({ de: "Wörter", en: "words" })}
+            </span>
+            <span className="text-xs" role="status" data-error={saveError}>
+              {isSaving
+                ? t({ de: "Speichert …", en: "Saving …" })
+                : saveError
+                  ? t({ de: "Speicherfehler", en: "Save failed" })
+                  : isDirty
+                    ? t({ de: "Ungespeichert", en: "Unsaved" })
+                    : t({ de: "Gespeichert", en: "Saved" })}
+            </span>
+            {saveError && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => void saveChapter()}
+              >
+                {t({ de: "Erneut versuchen", en: "Retry" })}
+              </Button>
+            )}
             <Button
+              variant="ghost"
+              size="icon-sm"
               onClick={() => setIsFocusMode(false)}
-              className="rounded-full shadow-xl h-12 w-12 p-0 bg-primary text-primary-foreground hover:scale-105 transition-all"
-              title={t({
-                de: "Fokus-Modus beenden (ESC)",
-                en: "Exit focus mode (ESC)",
+              aria-label={t({
+                de: "Fokusmodus beenden",
+                en: "Exit focus mode",
               })}
+              title="Esc"
             >
-              <Minimize2 className="h-5 w-5 animate-pulse" />
+              <Minimize2 className="h-4 w-4" />
             </Button>
           </div>
         )}
       </div>
+
+      {showHistory && (
+        <ChapterHistoryDialog
+          bookId={chapter.bookId}
+          chapterId={chapter.id}
+          payload={{ title, content, summary, notes, status }}
+          disabled={isGenerating || isStreaming || !!recovery}
+          onRestore={applyDraft}
+          onClose={() => setShowHistory(false)}
+        />
+      )}
+      {showChapterSwitcher && (
+        <ChapterSwitcher
+          chapters={chapters}
+          currentId={chapter.id}
+          onSelect={(id) =>
+            navigateTo(`/books/${chapter.bookId}/chapter/${id}`)
+          }
+          onClose={() => setShowChapterSwitcher(false)}
+        />
+      )}
 
       {/* Advanced AI Panel - Hidden in Focus Mode */}
       {showAdvancedAI && !isFocusMode && (

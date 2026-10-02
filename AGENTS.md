@@ -23,7 +23,7 @@ This repository is a pnpm workspace for the AI-Bucherstellung app. Use these not
 Use TypeScript/TSX with ES modules and strict type checking. Follow the existing formatting in each file (double quotes, semicolons, and grouped imports are common). In `apps/web`, prefer the `@/*` path alias for local imports. Component files are `PascalCase.tsx`, while Next.js route files use `page.tsx` and `route.ts`.
 
 ## Testing Guidelines
-No automated test runner is configured yet, and there are no coverage requirements. At minimum, run `pnpm check-types` and perform manual UI checks for the affected routes. If you add a test framework, include scripts and document it here.
+Run `pnpm --filter web test:history` for the local chapter history tests (Node's built-in test runner, no additional dependencies). There are no coverage requirements. At minimum, run `pnpm check-types` and perform manual UI checks for the affected routes. If you add a test framework, include scripts and document it here.
 
 ## Commit & Pull Request Guidelines
 Git history only shows "initial commit", so there is no established convention. Use concise, imperative commit messages (e.g., "Add book editor autosave"). PRs should include a short summary, testing notes, and screenshots for UI changes; call out any Prisma schema updates and include the migration steps.
