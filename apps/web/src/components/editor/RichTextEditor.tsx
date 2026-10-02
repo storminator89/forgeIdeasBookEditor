@@ -56,6 +56,7 @@ interface RichTextEditorProps {
     editorClassName?: string;
     bookId?: string;
     aiContext?: string;
+    hideToolbar?: boolean;
 }
 
 interface ToolbarButtonProps {
@@ -242,6 +243,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
         editorClassName,
         bookId,
         aiContext,
+        hideToolbar = false,
     }, ref) {
         const [showImageDialog, setShowImageDialog] = useState(false);
         const [imageUrl, setImageUrl] = useState("");
@@ -680,11 +682,11 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
     return (
         <>
             <div className={cn("rounded-md border bg-background relative", className)}>
-                <Toolbar editor={editor} onImageClick={() => setShowImageDialog(true)} />
+                {!hideToolbar && <Toolbar editor={editor} onImageClick={() => setShowImageDialog(true)} />}
                 <EditorContent editor={editor} />
 
                 {/* Inline AI Floating Menu */}
-                {bookId && hasSelection && aiMenuPos && (
+                {bookId && !hideToolbar && hasSelection && aiMenuPos && (
                     <div
                         className="ai-floating-menu absolute z-50 bg-background border rounded-lg shadow-lg p-1 flex items-center gap-1"
                         style={{

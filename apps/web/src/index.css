@@ -2136,6 +2136,69 @@ input[type="range"] {
 .chapter-reference-dock {
   right: 18px;
 }
+body[data-writing-focus="true"] .studio-header,
+body[data-writing-focus="true"] .skip-link {
+  visibility: hidden;
+}
+
+.chapter-writing-view.chapter-focus-mode {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  height: 100dvh;
+}
+
+.chapter-focus-mode .chapter-writing-header,
+.chapter-focus-mode .chapter-writing-footer {
+  display: none;
+}
+
+.chapter-focus-mode .chapter-writing-scroll {
+  padding-bottom: 6rem;
+}
+
+.chapter-focus-mode .chapter-writing-sheet {
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.chapter-focus-mode .chapter-writing-sheet > [data-slot="input"] {
+  background: transparent;
+  border-radius: 0;
+}
+
+.chapter-focus-mode .chapter-sheet-binding {
+  display: none;
+}
+
+.chapter-focus-mode .tiptap,
+.chapter-focus-mode .tiptap p {
+  text-align: start;
+}
+
+.chapter-focus-bar {
+  position: absolute;
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  max-width: calc(100% - 2rem);
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.chapter-focus-bar [data-error="true"] {
+  color: var(--destructive);
+}
+
 .chapter-writing-scroll .prose {
   font-family: var(--font-crimson-pro), Georgia, serif;
 }

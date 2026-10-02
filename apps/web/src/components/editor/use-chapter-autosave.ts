@@ -3,13 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { recordWritingProgress } from "@/lib/writing-progress";
 
-type ChapterDraft = {
-  title: string;
-  content: string;
-  summary: string;
-  notes: string;
-  status: string;
-};
+import { checkpointChapter, type ChapterDraft } from "@/lib/chapter-history";
+
 type RecoveryDraft = { payload: ChapterDraft; savedAt: string };
 function isDraft(value: unknown): value is RecoveryDraft {
   if (
@@ -58,7 +53,8 @@ export function useChapterAutosave({
   const snapshot = JSON.stringify(payload);
   const latestSnapshot = useRef(snapshot);
   latestSnapshot.current = snapshot;
-  const inFlight = useRef(false);
+  const inFlight = useRef<Promise<boolean> | null>(null);
+  const savedSnapshotRef = useRef(initialSnapshot.current);
   const lastWordCount = useRef(initialWordCount);
   const key = `forge-draft:${bookId}:${chapterId}`;
   const isDirty = snapshot !== savedSnapshot;
@@ -99,36 +95,68 @@ export function useChapterAutosave({
       setLocalDraftAvailable(false);
     }
   }, [isDirty, key, snapshot, ready, recovery]);
-  const saveChapter = useCallback(async () => {
-    if (inFlight.current || recovery) return;
-    const submitted = latestSnapshot.current;
-    inFlight.current = true;
-    setIsSaving(true);
-    try {
-      const response = await fetch(
-        `/api/books/${bookId}/chapters/${chapterId}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: submitted,
-        },
-      );
-      if (!response.ok) throw new Error("Save failed");
-      const saved = await response.json();
-      if (Number.isFinite(saved.wordCount)) {
-        recordWritingProgress(bookId, saved.wordCount - lastWordCount.current);
-        lastWordCount.current = saved.wordCount;
+  const saveChapter = useCallback(async (): Promise<boolean> => {
+    if (!ready || recovery) return false;
+    // Explicit saves and chapter navigation wait for an existing request, then
+    // drain any edits made while it was running rather than dropping them.
+    if (inFlight.current && !(await inFlight.current)) return false;
+    while (latestSnapshot.current !== savedSnapshotRef.current) {
+      if (inFlight.current) {
+        if (!(await inFlight.current)) return false;
+        continue;
       }
-      setSavedSnapshot(submitted);
-      setLastSaved(new Date());
-      setSaveError(false);
-    } catch {
-      setSaveError(true);
-    } finally {
-      inFlight.current = false;
-      setIsSaving(false);
+      const submitted = latestSnapshot.current;
+      const previous = savedSnapshotRef.current;
+      setIsSaving(true);
+      const request = (async () => {
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 15_000);
+        try {
+          const response = await fetch(
+            `/api/books/${bookId}/chapters/${chapterId}`,
+            {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: submitted,
+              signal: controller.signal,
+            },
+          );
+          if (!response.ok) throw new Error("Save failed");
+          const saved = await response.json();
+          const previousDraft: ChapterDraft = JSON.parse(previous);
+          const submittedDraft: ChapterDraft = JSON.parse(submitted);
+          if (
+            previousDraft.content !== submittedDraft.content ||
+            previousDraft.title !== submittedDraft.title
+          ) {
+            checkpointChapter(bookId, chapterId, previousDraft, "automatic");
+          }
+          if (Number.isFinite(saved.wordCount)) {
+            recordWritingProgress(
+              bookId,
+              saved.wordCount - lastWordCount.current,
+            );
+            lastWordCount.current = saved.wordCount;
+          }
+          savedSnapshotRef.current = submitted;
+          setSavedSnapshot(submitted);
+          setLastSaved(new Date());
+          setSaveError(false);
+          return true;
+        } catch {
+          setSaveError(true);
+          return false;
+        } finally {
+          window.clearTimeout(timeout);
+          inFlight.current = null;
+          setIsSaving(false);
+        }
+      })();
+      inFlight.current = request;
+      if (!(await request)) return false;
     }
-  }, [bookId, chapterId, recovery]);
+    return true;
+  }, [bookId, chapterId, recovery, ready]);
   useEffect(() => {
     if (!ready || recovery || !isDirty) return;
     const timer = window.setTimeout(() => {

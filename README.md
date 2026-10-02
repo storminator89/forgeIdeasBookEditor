@@ -18,11 +18,19 @@ Ein kreatives Schreibstudio, das die erste Idee, Figuren, Weltenbau und Manuskri
 
 ![Neues Buchprojekt](docs/screenshots/creation-desktop.webp)
 
+![Ruhiger Fokusmodus](docs/screenshots/focus-desktop.webp)
+
+![Lokale Textstände mit Vorschau](docs/screenshots/history-desktop.webp)
+
 </details>
 
-> Schreibziele, zuletzt geöffnete Kapitel und Wiederherstellungsentwürfe werden im Browser auf dem jeweiligen Gerät gespeichert. Das Manuskript wird weiterhin in der Datenbank gespeichert. Lokale Entwürfe ersetzen kein regelmäßiges Backup.
+> Schreibziele, zuletzt geöffnete Kapitel, Wiederherstellungsentwürfe und Textstände werden im Browser auf dem jeweiligen Gerät gespeichert. Das Manuskript wird weiterhin in der Datenbank gespeichert. Lokale Entwürfe ersetzen kein regelmäßiges Backup.
 
-**Shortcuts:** `Strg/⌘ + S` speichert das Kapitel, `Strg/⌘ + K` öffnet die Buchsuche, `Esc` beendet den Fokusmodus und schließt Dialoge.
+**Shortcuts:** `Strg/⌘ + S` speichert das Kapitel, `Strg/⌘ + K` öffnet im Buch die Suche und im Editor die Kapitelwahl, `Strg/⌘ + Shift + F` schaltet den Fokusmodus um, `Esc` beendet den Fokusmodus und schließt Dialoge.
+
+Im Kapitelmenü findest du **Textstände** und den **Textexport** des aktuellen Kapitels. Vor dem Speichern wird der vorherige Textstand lokal gesichert, höchstens alle fünf Minuten. Bis zu zehn Stände je Kapitel (zusätzlich durch ein Speicherlimit begrenzt) lassen sich mit Titel, Zusammenfassung, Notizen und Status wiederherstellen. Vorher wird der aktuelle Entwurf gesichert. Manuelle Stände kannst du jederzeit anlegen. Der Verlauf ist gerätegebunden und geht beim Löschen der Browserdaten verloren.
+
+Die Kapitelwahl sowie die Links zum vorherigen/nächsten Kapitel und zurück ins Buch warten auf ausstehende Speicheranfragen. Bei einem Fehler bleibt der Editor geöffnet. Im Fokusmodus verschwinden Navigation und Formatierungsleiste; Wortzahl und Speicherstatus bleiben dezent sichtbar. Die gewohnten Formatierungstasten funktionieren weiterhin.
 
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19-blue?style=for-the-badge&logo=react)](https://reactjs.org/)
