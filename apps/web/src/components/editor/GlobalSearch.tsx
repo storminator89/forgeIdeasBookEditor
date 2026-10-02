@@ -37,11 +37,23 @@ interface GlobalSearchProps {
 const TYPE_CONFIG = {
     chapter: { icon: FileText, color: "text-blue-500", bg: "bg-blue-500/10" },
     character: { icon: User, color: "text-purple-500", bg: "bg-purple-500/10" },
-    plotpoint: { icon: GitBranch, color: "text-pink-500", bg: "bg-pink-500/10" },
-    worldelement: { icon: Globe, color: "text-green-500", bg: "bg-green-500/10" },
+    plotpoint: {
+        icon: GitBranch,
+        color: "text-pink-500",
+        bg: "bg-pink-500/10",
+    },
+    worldelement: {
+        icon: Globe,
+        color: "text-green-500",
+        bg: "bg-green-500/10",
+    },
 };
 
-export default function GlobalSearch({ bookId, onNavigateToChapter, onNavigateToTab }: GlobalSearchProps) {
+export default function GlobalSearch({
+    bookId,
+    onNavigateToChapter,
+    onNavigateToTab,
+}: GlobalSearchProps) {
     const { t } = useI18n();
     const router = useRouter();
     const [isOpen, setIsOpen] = useState(false);
@@ -54,20 +66,27 @@ export default function GlobalSearch({ bookId, onNavigateToChapter, onNavigateTo
     const inputRef = useRef<HTMLInputElement>(null);
     const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
-    const matchFieldMap = useMemo(() => ({
-        Titel: { de: "Titel", en: "Title" },
-        Inhalt: { de: "Inhalt", en: "Content" },
-        Zusammenfassung: { de: "Zusammenfassung", en: "Summary" },
-        Notizen: { de: "Notizen", en: "Notes" },
-        Name: { de: "Name", en: "Name" },
-        Beschreibung: { de: "Beschreibung", en: "Description" },
-        Hintergrund: { de: "Hintergrund", en: "Backstory" },
-    }) satisfies Record<string, TranslatedText>, []);
+    const matchFieldMap = useMemo(
+        () =>
+            ({
+                Titel: { de: "Titel", en: "Title" },
+                Inhalt: { de: "Inhalt", en: "Content" },
+                Zusammenfassung: { de: "Zusammenfassung", en: "Summary" },
+                Notizen: { de: "Notizen", en: "Notes" },
+                Name: { de: "Name", en: "Name" },
+                Beschreibung: { de: "Beschreibung", en: "Description" },
+                Hintergrund: { de: "Hintergrund", en: "Backstory" },
+            }) satisfies Record<string, TranslatedText>,
+        [],
+    );
 
-    const formatMatchField = useCallback((field: string) => {
-        const entry = matchFieldMap[field as keyof typeof matchFieldMap];
-        return entry ? t(entry) : field;
-    }, [matchFieldMap, t]);
+    const formatMatchField = useCallback(
+        (field: string) => {
+            const entry = matchFieldMap[field as keyof typeof matchFieldMap];
+            return entry ? t(entry) : field;
+        },
+        [matchFieldMap, t],
+    );
 
     // For SSR safety
     useEffect(() => {
@@ -75,33 +94,36 @@ export default function GlobalSearch({ bookId, onNavigateToChapter, onNavigateTo
     }, []);
 
     // Perform search
-    const performSearch = useCallback(async (searchQuery: string) => {
-        if (searchQuery.trim().length < 2) {
-            setResults([]);
-            setTotal(0);
-            return;
-        }
-
-        setIsSearching(true);
-        try {
-            const response = await fetch(`/api/books/${bookId}/search`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ query: searchQuery }),
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                setResults(data.results || []);
-                setTotal(data.total || 0);
-                setSelectedIndex(0);
+    const performSearch = useCallback(
+        async (searchQuery: string) => {
+            if (searchQuery.trim().length < 2) {
+                setResults([]);
+                setTotal(0);
+                return;
             }
-        } catch (error) {
-            console.error("Search error:", error);
-        } finally {
-            setIsSearching(false);
-        }
-    }, [bookId]);
+
+            setIsSearching(true);
+            try {
+                const response = await fetch(`/api/books/${bookId}/search`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ query: searchQuery }),
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    setResults(data.results || []);
+                    setTotal(data.total || 0);
+                    setSelectedIndex(0);
+                }
+            } catch (error) {
+                console.error("Search error:", error);
+            } finally {
+                setIsSearching(false);
+            }
+        },
+        [bookId],
+    );
 
     // Debounced search
     useEffect(() => {
@@ -155,10 +177,10 @@ export default function GlobalSearch({ bookId, onNavigateToChapter, onNavigateTo
             setIsOpen(false);
         } else if (e.key === "ArrowDown") {
             e.preventDefault();
-            setSelectedIndex(prev => Math.min(prev + 1, results.length - 1));
+            setSelectedIndex((prev) => Math.min(prev + 1, results.length - 1));
         } else if (e.key === "ArrowUp") {
             e.preventDefault();
-            setSelectedIndex(prev => Math.max(prev - 1, 0));
+            setSelectedIndex((prev) => Math.max(prev - 1, 0));
         } else if (e.key === "Enter" && results[selectedIndex]) {
             handleResultClick(results[selectedIndex]);
         }
@@ -168,15 +190,23 @@ export default function GlobalSearch({ bookId, onNavigateToChapter, onNavigateTo
     const highlightMatch = (text: string, searchTerm: string) => {
         if (!text || !searchTerm) return text;
 
-        const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
+        const regex = new RegExp(
+            `(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
+            "gi",
+        );
         const parts = text.split(regex);
 
         return parts.map((part, i) =>
             regex.test(part) ? (
-                <mark key={i} className="bg-yellow-300 dark:bg-yellow-700 px-0.5 rounded font-medium">
+                <mark
+                    key={i}
+                    className="bg-yellow-300 dark:bg-yellow-700 px-0.5 rounded font-medium"
+                >
                     {part}
                 </mark>
-            ) : part
+            ) : (
+                part
+            ),
         );
     };
 
@@ -190,22 +220,29 @@ export default function GlobalSearch({ bookId, onNavigateToChapter, onNavigateTo
                 router.push(`/books/${bookId}/chapter/${result.id}` as Route);
             }
         } else if (result.type === "character") {
-            if (onNavigateToTab?.("characters", result.id)) return;
+            onNavigateToTab?.("characters", result.id);
         } else if (result.type === "plotpoint") {
-            if (onNavigateToTab?.("plot", result.id)) return;
+            onNavigateToTab?.("plot", result.id);
         } else if (result.type === "worldelement") {
-            if (onNavigateToTab?.("world", result.id)) return;
+            onNavigateToTab?.("world", result.id);
         }
     };
 
-    const footerLabel = total > results.length
-        ? t({
-            de: "{{shown}} von {{total}} Ergebnissen",
-            en: "{{shown}} of {{total}} results",
-        }, { shown: results.length, total })
-        : results.length === 1
-            ? t({ de: "1 Ergebnis", en: "1 result" })
-            : t({ de: "{{count}} Ergebnisse", en: "{{count}} results" }, { count: results.length });
+    const footerLabel =
+        total > results.length
+            ? t(
+                  {
+                      de: "{{shown}} von {{total}} Ergebnissen",
+                      en: "{{shown}} of {{total}} results",
+                  },
+                  { shown: results.length, total },
+              )
+            : results.length === 1
+              ? t({ de: "1 Ergebnis", en: "1 result" })
+              : t(
+                    { de: "{{count}} Ergebnisse", en: "{{count}} results" },
+                    { count: results.length },
+                );
 
     // Modal content
     const modalContent = (
@@ -259,17 +296,37 @@ export default function GlobalSearch({ bookId, onNavigateToChapter, onNavigateTo
                         {isSearching ? (
                             <div className="flex items-center justify-center py-12 text-muted-foreground">
                                 <Loader2 className="h-6 w-6 animate-spin mr-3" />
-                                <span>{t({ de: "Suche...", en: "Searching..." })}</span>
+                                <span>
+                                    {t({ de: "Suche...", en: "Searching..." })}
+                                </span>
                             </div>
                         ) : results.length === 0 && query.length >= 2 ? (
                             <div className="py-12 text-center text-muted-foreground">
                                 <Search className="h-10 w-10 mx-auto mb-3 opacity-30" />
-                                <p className="text-lg">{t({ de: "Keine Ergebnisse für \"{{query}}\"", en: "No results for \"{{query}}\"" }, { query })}</p>
-                                <p className="text-sm mt-1">{t({ de: "Versuche einen anderen Suchbegriff", en: "Try another search term" })}</p>
+                                <p className="text-lg">
+                                    {t(
+                                        {
+                                            de: 'Keine Ergebnisse für "{{query}}"',
+                                            en: 'No results for "{{query}}"',
+                                        },
+                                        { query },
+                                    )}
+                                </p>
+                                <p className="text-sm mt-1">
+                                    {t({
+                                        de: "Versuche einen anderen Suchbegriff",
+                                        en: "Try another search term",
+                                    })}
+                                </p>
                             </div>
                         ) : results.length === 0 && query.length < 2 ? (
                             <div className="py-12 text-center text-muted-foreground">
-                                <p className="text-sm">{t({ de: "Gib mindestens 2 Zeichen ein, um zu suchen", en: "Type at least 2 characters to search" })}</p>
+                                <p className="text-sm">
+                                    {t({
+                                        de: "Gib mindestens 2 Zeichen ein, um zu suchen",
+                                        en: "Type at least 2 characters to search",
+                                    })}
+                                </p>
                             </div>
                         ) : (
                             <div className="py-2">
@@ -281,41 +338,78 @@ export default function GlobalSearch({ bookId, onNavigateToChapter, onNavigateTo
                                     return (
                                         <button
                                             key={`${result.type}-${result.id}`}
-                                            onClick={() => handleResultClick(result)}
-                                            onMouseEnter={() => setSelectedIndex(index)}
+                                            onClick={() =>
+                                                handleResultClick(result)
+                                            }
+                                            onMouseEnter={() =>
+                                                setSelectedIndex(index)
+                                            }
                                             className={cn(
                                                 "w-full flex items-start gap-4 px-4 py-3 transition-colors text-left",
-                                                isSelected ? "bg-accent" : "hover:bg-muted/50"
+                                                isSelected
+                                                    ? "bg-accent"
+                                                    : "hover:bg-muted/50",
                                             )}
                                         >
-                                            <div className={cn("mt-0.5 p-2 rounded-lg", config.bg)}>
-                                                <Icon className={cn("h-4 w-4", config.color)} />
+                                            <div
+                                                className={cn(
+                                                    "mt-0.5 p-2 rounded-lg",
+                                                    config.bg,
+                                                )}
+                                            >
+                                                <Icon
+                                                    className={cn(
+                                                        "h-4 w-4",
+                                                        config.color,
+                                                    )}
+                                                />
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <span className="font-semibold">
-                                                        {result.type === "chapter" && result.orderIndex !== undefined && (
-                                                            <span className="text-muted-foreground font-normal mr-1">
-                                                                {t({ de: "Kap.", en: "Ch." })} {result.orderIndex + 1}:
-                                                            </span>
-                                                        )}
+                                                        {result.type ===
+                                                            "chapter" &&
+                                                            result.orderIndex !==
+                                                                undefined && (
+                                                                <span className="text-muted-foreground font-normal mr-1">
+                                                                    {t({
+                                                                        de: "Kap.",
+                                                                        en: "Ch.",
+                                                                    })}{" "}
+                                                                    {result.orderIndex +
+                                                                        1}
+                                                                    :
+                                                                </span>
+                                                            )}
                                                         {result.title}
                                                     </span>
-                                                    <span className={cn(
-                                                        "text-xs px-2 py-0.5 rounded-full",
-                                                        config.bg, config.color
-                                                    )}>
-                                                        {formatMatchField(result.matchField)}
+                                                    <span
+                                                        className={cn(
+                                                            "text-xs px-2 py-0.5 rounded-full",
+                                                            config.bg,
+                                                            config.color,
+                                                        )}
+                                                    >
+                                                        {formatMatchField(
+                                                            result.matchField,
+                                                        )}
                                                     </span>
                                                 </div>
                                                 <p className="text-sm text-muted-foreground line-clamp-2">
-                                                    {highlightMatch(result.context, query)}
+                                                    {highlightMatch(
+                                                        result.context,
+                                                        query,
+                                                    )}
                                                 </p>
                                             </div>
-                                            <ChevronRight className={cn(
-                                                "h-5 w-5 mt-2 flex-shrink-0 transition-colors",
-                                                isSelected ? "text-foreground" : "text-muted-foreground/50"
-                                            )} />
+                                            <ChevronRight
+                                                className={cn(
+                                                    "h-5 w-5 mt-2 flex-shrink-0 transition-colors",
+                                                    isSelected
+                                                        ? "text-foreground"
+                                                        : "text-muted-foreground/50",
+                                                )}
+                                            />
                                         </button>
                                     );
                                 })}
@@ -328,9 +422,15 @@ export default function GlobalSearch({ bookId, onNavigateToChapter, onNavigateTo
                         <div className="px-4 py-2 border-t bg-muted/30 flex items-center justify-between text-xs text-muted-foreground">
                             <span>{footerLabel}</span>
                             <div className="flex items-center gap-2">
-                                <kbd className="px-1.5 py-0.5 bg-muted rounded border text-xs">??</kbd>
-                                <span>{t({ de: "Navigieren", en: "Navigate" })}</span>
-                                <kbd className="px-1.5 py-0.5 bg-muted rounded border text-xs">?</kbd>
+                                <kbd className="px-1.5 py-0.5 bg-muted rounded border text-xs">
+                                    ??
+                                </kbd>
+                                <span>
+                                    {t({ de: "Navigieren", en: "Navigate" })}
+                                </span>
+                                <kbd className="px-1.5 py-0.5 bg-muted rounded border text-xs">
+                                    ?
+                                </kbd>
                                 <span>{t({ de: "Öffnen", en: "Open" })}</span>
                             </div>
                         </div>
@@ -348,7 +448,9 @@ export default function GlobalSearch({ bookId, onNavigateToChapter, onNavigateTo
                 className="w-full flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-lg border border-transparent hover:border-border transition-all"
             >
                 <Search className="h-4 w-4" />
-                <span className="flex-1 text-left">{t({ de: "Suchen...", en: "Search..." })}</span>
+                <span className="flex-1 text-left">
+                    {t({ de: "Suchen...", en: "Search..." })}
+                </span>
                 <kbd className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-mono bg-muted rounded border">
                     <Command className="h-3 w-3" />K
                 </kbd>

@@ -102,6 +102,7 @@ export default async function ChapterEditorPage({ params }: PageProps) {
 
     return (
         <ChapterEditorView
+            key={chapter.id}
             chapter={chapter}
             allCharacters={allCharacters}
             allPlotPoints={allPlotPoints}

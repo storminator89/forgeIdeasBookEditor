@@ -359,6 +359,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
     // Memoize extensions to prevent duplicate extension warnings
     const extensions = useMemo(() => [
         StarterKit.configure({
+            underline: false,
             heading: {
                 levels: [1, 2, 3],
             },
@@ -960,53 +961,4 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
 
 export default RichTextEditor;
 
-// Export text statistics utility
-export interface TextStatistics {
-    wordCount: number;
-    characterCount: number;
-    readingTime: number; // in minutes
-    paragraphCount: number;
-    sentenceCount: number;
-    averageSentenceLength: number; // words per sentence
-}
-
-export function getTextStatistics(html: string): TextStatistics {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, "text/html");
-    const text = doc.body.textContent || "";
-
-    // Word count
-    const words = text.trim().split(/\s+/).filter((word) => word.length > 0);
-    const wordCount = words.length;
-
-    // Character count (excluding whitespace for a more accurate "content" metric, or including? 
-    // Usually purely characters including spaces is standard for limits, but for "Netto" maybe without.
-    // Let's go with standard length).
-    const characterCount = text.length;
-
-    // Reading time (avg 225 words per minute)
-    const readingTime = Math.ceil(wordCount / 225);
-
-    // Paragraph count - counting block elements roughly
-    // This is a heuristic. Tiptap usually uses <p>.
-    const paragraphs = doc.querySelectorAll('p, h1, h2, h3, h4, h5, h6, blockquote, li');
-    // Filter out empty paragraphs often left by editors
-    const nonEmptyParagraphs = Array.from(paragraphs).filter(p => p.textContent?.trim().length ?? 0 > 0);
-    const paragraphCount = Math.max(1, nonEmptyParagraphs.length); // At least 1 if there is text, simplistic
-
-    // Sentence count
-    // specific punctuation split. roughly.
-    const sentenceCount = text.split(/[.!?]+/).filter(s => s.trim().length > 0).length || 1;
-
-    // Avg sentence length
-    const averageSentenceLength = wordCount > 0 ? Math.round(wordCount / sentenceCount) : 0;
-
-    return {
-        wordCount,
-        characterCount,
-        readingTime,
-        paragraphCount,
-        sentenceCount,
-        averageSentenceLength
-    };
-}
+export { getTextStatistics, type TextStatistics } from "@/lib/text-statistics";
