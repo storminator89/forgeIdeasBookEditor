@@ -1,4 +1,28 @@
-# AI-Bucherstellung | AI Book Creation
+# Forge Studio
+
+### Deine Idee. Dein Schreibflow. Dein nächstes Buch.
+
+Ein kreatives Schreibstudio, das die erste Idee, Figuren, Weltenbau und Manuskript an einem Ort zusammenbringt. Mit einem klaren Arbeitsbereich, ablenkungsfreiem Editor und KI, wenn du sie brauchst.
+
+![Forge Studio Bibliothek](docs/screenshots/library-desktop.webp)
+
+| Schreiben | Planen | Dranbleiben |
+| --- | --- | --- |
+| Rich-Text-Editor, Fokusmodus, automatisches Speichern | Kapitel, Figurenbeziehungen, Handlung und Weltenbau | Tagesziele, Manuskriptziel und schneller Wiedereinstieg |
+| Lokale Entwürfe mit Wiederherstellung nach Speicherfehlern | Story-Wizard und KI-Assistenz mit deinem Anbieter | Bibliothek mit Suche, Genre-Filtern und gespeicherter Ansicht |
+
+<details>
+<summary>Ein Blick ins Schreibstudio</summary>
+
+![Bucharbeitsbereich](docs/screenshots/overview-desktop.webp)
+
+![Neues Buchprojekt](docs/screenshots/creation-desktop.webp)
+
+</details>
+
+> Schreibziele, zuletzt geöffnete Kapitel und Wiederherstellungsentwürfe werden im Browser auf dem jeweiligen Gerät gespeichert. Das Manuskript wird weiterhin in der Datenbank gespeichert. Lokale Entwürfe ersetzen kein regelmäßiges Backup.
+
+**Shortcuts:** `Strg/⌘ + S` speichert das Kapitel, `Strg/⌘ + K` öffnet die Buchsuche, `Esc` beendet den Fokusmodus und schließt Dialoge.
 
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19-blue?style=for-the-badge&logo=react)](https://reactjs.org/)
@@ -59,7 +83,7 @@ npm install -g pnpm
 ### 1. Repository klonen
 
 ```bash
-git clone [your-repo-url]
+git clone https://github.com/storminator89/forgeIdeasBookEditor.git
 cd forgeIdeasBookEditor
 ```
 

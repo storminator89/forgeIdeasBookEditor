@@ -2,12 +2,32 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, Sparkles, PenTool, Upload, FileText, File, CheckCircle2, AlertCircle } from "lucide-react";
+import {
+    ArrowLeft,
+    Loader2,
+    Sparkles,
+    PenTool,
+    Upload,
+    FileText,
+    File,
+    CheckCircle2,
+    AlertCircle,
+    ArrowUpRight,
+    Check,
+} from "lucide-react";
 import Link from "next/link";
 import type { Route } from "next";
 
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import StoryWizard from "@/components/wizard/StoryWizard";
@@ -80,21 +100,40 @@ export default function NewBookPage() {
             router.push(`/books/${book.id}` as Route);
         } catch (error) {
             console.error("Error creating book:", error);
+            toast.error(
+                t({
+                    de: "Das Buch konnte nicht erstellt werden. Bitte versuche es erneut.",
+                    en: "Could not create your book. Please try again.",
+                }),
+            );
             setIsLoading(false);
         }
     };
 
-    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
+    const selectFile = (file: File | undefined) => {
+        if (file && !/\.(docx|txt|md)$/i.test(file.name)) {
+            toast.error(
+                t({
+                    de: "Bitte eine DOCX-, TXT- oder Markdown-Datei auswählen.",
+                    en: "Please select a DOCX, TXT or Markdown file.",
+                }),
+            );
+            return;
+        }
         if (file) {
             setSelectedFile(file);
             // Use filename as default title
             if (!importTitle) {
-                const fileName = file.name.replace(/\.[^.]+$/, "").replace(/[_-]/g, " ");
+                const fileName = file.name
+                    .replace(/\.[^.]+$/, "")
+                    .replace(/[_-]/g, " ");
                 setImportTitle(fileName);
             }
         }
     };
+
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) =>
+        selectFile(e.target.files?.[0]);
 
     const handleImport = async () => {
         if (!selectedFile) return;
@@ -124,14 +163,19 @@ export default function NewBookPage() {
             } else {
                 setImportResult({
                     success: false,
-                    message: data.error || t({ de: "Import fehlgeschlagen", en: "Import failed" }),
+                    message:
+                        data.error ||
+                        t({ de: "Import fehlgeschlagen", en: "Import failed" }),
                 });
             }
         } catch (error) {
             console.error("Import error:", error);
             setImportResult({
                 success: false,
-                message: t({ de: "Ein unerwarteter Fehler ist aufgetreten", en: "An unexpected error occurred" }),
+                message: t({
+                    de: "Ein unerwarteter Fehler ist aufgetreten",
+                    en: "An unexpected error occurred",
+                }),
             });
         } finally {
             setIsImporting(false);
@@ -139,136 +183,190 @@ export default function NewBookPage() {
     };
 
     const getFileIcon = (fileName: string) => {
-        if (fileName.endsWith(".docx")) return <FileText className="h-8 w-8 text-blue-500" />;
-        if (fileName.endsWith(".md")) return <File className="h-8 w-8 text-purple-500" />;
+        if (fileName.endsWith(".docx"))
+            return <FileText className="h-8 w-8 text-blue-500" />;
+        if (fileName.endsWith(".md"))
+            return <File className="h-8 w-8 text-purple-500" />;
         return <File className="h-8 w-8 text-gray-500" />;
     };
 
     // Mode selection screen
     if (mode === "select") {
         return (
-            <div className="container mx-auto py-8 px-4 max-w-4xl">
-                <Link href={"/books" as Route} className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 transition-colors">
-                    <ArrowLeft className="h-4 w-4" />
-                    {t({ de: "Zurück zur Übersicht", en: "Back to overview" })}
+            <main className="creation-page">
+                <Link href="/books" className="creation-back">
+                    <ArrowLeft size={15} />
+                    {t({ de: "Zur Bibliothek", en: "Back to library" })}
                 </Link>
-
-                <h1 className="text-3xl font-bold mb-2">{t({ de: "Neues Buch erstellen", en: "Create a new book" })}</h1>
-                <p className="text-muted-foreground mb-8">
-                    {t({
-                        de: "Wähle, wie du dein neues Buchprojekt starten möchtest.",
-                        en: "Choose how you'd like to start your new book project.",
-                    })}
-                </p>
-
-                <div className="grid md:grid-cols-3 gap-6">
-                    {/* AI Wizard Option */}
-                    <Card
-                        className={`cursor-pointer transition-all hover:shadow-lg hover:border-primary/50 ${!hasApiKey ? "opacity-50" : ""
-                            }`}
-                        onClick={() => hasApiKey && setMode("wizard")}
-                    >
-                        <CardHeader>
-                            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center mb-4">
-                                <Sparkles className="h-6 w-6 text-white" />
-                            </div>
-                            <CardTitle>{t({ de: "Mit KI-Assistent", en: "With AI assistant" })}</CardTitle>
-                            <CardDescription>
-                                {t({
-                                    de: "Beschreibe deine Idee und lass die KI Charaktere, Handlung und Welt automatisch entwickeln.",
-                                    en: "Describe your idea and let the AI develop characters, plot, and world automatically.",
-                                })}
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
+                <div className="creation-intro">
+                    <span className="page-eyebrow">
+                        A BLANK PAGE. INFINITE POSSIBILITIES.
+                    </span>
+                    <h1>
+                        {t({
+                            de: "Was ist deine nächste",
+                            en: "What's your next",
+                        })}
+                        <br />
+                        <span>
+                            {t({ de: "große Geschichte?", en: "great story?" })}
+                        </span>
+                    </h1>
+                    <p>
+                        {t({
+                            de: "Eine erste Idee, ein leeres Blatt oder ein fertiger Entwurf – finde deinen Einstieg. Den Rest schreibst du.",
+                            en: "A first idea, a blank page or an existing draft — find your starting point. You write the rest.",
+                        })}
+                    </p>
+                </div>
+                <div className="creation-options">
+                    <section className="creation-option creation-ai">
+                        <span className="creation-number">01 / CO-CREATE</span>
+                        <span className="creation-option-icon">
+                            <Sparkles size={28} />
+                        </span>
+                        <h2>
+                            {t({
+                                de: "Eine Idee. Viele Möglichkeiten.",
+                                en: "One idea. Endless possibilities.",
+                            })}
+                        </h2>
+                        <p>
+                            {t({
+                                de: "Entwickle mit dem KI Story-Wizard deine Figuren, Handlung und Welt. Deine Kreativität gibt die Richtung vor.",
+                                en: "Develop your characters, plot and world with the AI story wizard. Your creativity sets the direction.",
+                            })}
+                        </p>
+                        <div className="creation-option-footer">
                             {loadingSettings ? (
-                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                    {t({ de: "Lade Einstellungen...", en: "Loading settings..." })}
-                                </div>
+                                <span className="flex items-center gap-2 text-xs">
+                                    <Loader2
+                                        size={15}
+                                        className="animate-spin"
+                                    />
+                                    {t({
+                                        de: "KI-Verbindung prüfen …",
+                                        en: "Checking AI connection …",
+                                    })}
+                                </span>
                             ) : hasApiKey ? (
-                                <div className="space-y-2">
-                                    <div className="text-sm text-green-600 dark:text-green-400">
-                                        {t({ de: "? KI bereit ({{model}})", en: "? AI ready ({{model}})" }, { model: aiModel })}
-                                    </div>
-                                    <Button className="w-full" onClick={() => setMode("wizard")}>
-                                        <Sparkles className="mr-2 h-4 w-4" />
-                                        {t({ de: "Wizard starten", en: "Start wizard" })}
+                                <>
+                                    <span className="creation-ready">
+                                        <Check size={13} />
+                                        {aiModel}
+                                    </span>
+                                    <Button
+                                        onClick={() => setMode("wizard")}
+                                        className="w-full"
+                                    >
+                                        {t({
+                                            de: "Mit KI entwickeln",
+                                            en: "Create with AI",
+                                        })}
+                                        <ArrowUpRight size={16} />
                                     </Button>
-                                </div>
+                                </>
                             ) : (
-                                <div className="space-y-2">
-                                    <div className="text-sm text-yellow-600 dark:text-yellow-400">
-                                        {t({ de: "Keine API-Konfiguration gefunden.", en: "No API configuration found." })}
-                                    </div>
-                                    <Link href={"/settings" as Route}>
-                                        <Button variant="outline" className="w-full">
-                                            {t({ de: "Einstellungen konfigurieren", en: "Configure settings" })}
-                                        </Button>
+                                <>
+                                    <span className="creation-hint">
+                                        {t({
+                                            de: "Verbinde zuerst deinen KI-Anbieter.",
+                                            en: "Connect your AI provider first.",
+                                        })}
+                                    </span>
+                                    <Link
+                                        href="/settings"
+                                        className="creation-settings-link"
+                                    >
+                                        {t({
+                                            de: "KI einrichten",
+                                            en: "Set up AI",
+                                        })}
+                                        <ArrowUpRight size={16} />
                                     </Link>
-                                </div>
+                                </>
                             )}
-                        </CardContent>
-                    </Card>
-
-                    {/* Manual Option */}
-                    <Card
-                        className="cursor-pointer transition-all hover:shadow-lg hover:border-primary/50"
+                        </div>
+                    </section>
+                    <button
+                        type="button"
+                        className="creation-option creation-manual"
                         onClick={() => setMode("manual")}
                     >
-                        <CardHeader>
-                            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center mb-4">
-                                <PenTool className="h-6 w-6 text-white" />
-                            </div>
-                            <CardTitle>{t({ de: "Manuell erstellen", en: "Create manually" })}</CardTitle>
-                            <CardDescription>
+                        <span className="creation-number">02 / WRITE</span>
+                        <span className="creation-option-icon">
+                            <PenTool size={28} />
+                        </span>
+                        <h2>
+                            {t({
+                                de: "Dein Buch. Deine Regeln.",
+                                en: "Your book. Your rules.",
+                            })}
+                        </h2>
+                        <p>
+                            {t({
+                                de: "Starte mit einem leeren Projekt. Plane in deinem Tempo und lass Wort für Wort deine Geschichte entstehen.",
+                                en: "Start with a blank project. Plan at your own pace and let your story unfold word by word.",
+                            })}
+                        </p>
+                        <span className="creation-option-footer">
+                            <span className="creation-option-action">
                                 {t({
-                                    de: "Erstelle dein Buch klassisch mit einem leeren Projekt und füge alles selbst hinzu.",
-                                    en: "Create your book the classic way with an empty project and add everything yourself.",
+                                    de: "Mit leerem Buch starten",
+                                    en: "Start with a blank book",
                                 })}
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <Button variant="outline" className="w-full" onClick={() => setMode("manual")}>
-                                <PenTool className="mr-2 h-4 w-4" />
-                                {t({ de: "Manuell starten", en: "Start manual" })}
-                            </Button>
-                        </CardContent>
-                    </Card>
-
-                    {/* Import Option */}
-                    <Card
-                        className="cursor-pointer transition-all hover:shadow-lg hover:border-primary/50"
+                                <ArrowUpRight size={16} />
+                            </span>
+                        </span>
+                    </button>
+                    <button
+                        type="button"
+                        className="creation-option creation-import"
                         onClick={() => setMode("import")}
                     >
-                        <CardHeader>
-                            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center mb-4">
-                                <Upload className="h-6 w-6 text-white" />
-                            </div>
-                            <CardTitle>{t({ de: "Werk importieren", en: "Import work" })}</CardTitle>
-                            <CardDescription>
+                        <span className="creation-number">
+                            03 / BRING YOUR STORY
+                        </span>
+                        <span className="creation-option-icon">
+                            <Upload size={28} />
+                        </span>
+                        <h2>
+                            {t({
+                                de: "Schon mittendrin?",
+                                en: "Already in the middle?",
+                            })}
+                        </h2>
+                        <p>
+                            {t({
+                                de: "Bring dein Manuskript mit. Importiere DOCX, TXT oder Markdown – die Kapitelaufteilung übernehmen wir.",
+                                en: "Bring your manuscript. Import DOCX, TXT or Markdown — we'll take care of splitting chapters.",
+                            })}
+                        </p>
+                        <span className="creation-option-footer">
+                            <span className="creation-option-action">
                                 {t({
-                                    de: "Importiere ein bestehendes Werk aus DOCX, TXT oder Markdown mit automatischer Kapitelaufteilung.",
-                                    en: "Import an existing work from DOCX, TXT, or Markdown with automatic chapter splitting.",
+                                    de: "Manuskript importieren",
+                                    en: "Import manuscript",
                                 })}
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <Button variant="outline" className="w-full" onClick={() => setMode("import")}>
-                                <Upload className="mr-2 h-4 w-4" />
-                                {t({ de: "Datei importieren", en: "Import file" })}
-                            </Button>
-                        </CardContent>
-                    </Card>
+                                <ArrowUpRight size={16} />
+                            </span>
+                        </span>
+                    </button>
                 </div>
-            </div>
+                <p className="creation-bottom-note">
+                    {t({
+                        de: "Vom ersten Satz bis zum letzten Kapitel. Alles an einem Ort.",
+                        en: "From the first sentence to the last chapter. All in one place.",
+                    })}
+                </p>
+            </main>
         );
     }
 
     // AI Wizard mode
     if (mode === "wizard" && hasApiKey) {
         return (
-            <div className="container mx-auto py-8 px-4 max-w-3xl">
+            <div className="creation-form-page container mx-auto py-10 px-5 max-w-3xl">
                 <button
                     onClick={() => setMode("select")}
                     className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 transition-colors"
@@ -282,12 +380,13 @@ export default function NewBookPage() {
                     {t({ de: "KI Story-Wizard", en: "AI story wizard" })}
                 </h1>
                 <p className="text-muted-foreground mb-8">
-                    {t({ de: "Lass die KI dir helfen, deine Geschichte zu entwickeln.", en: "Let AI help you develop your story." })}
+                    {t({
+                        de: "Lass die KI dir helfen, deine Geschichte zu entwickeln.",
+                        en: "Let AI help you develop your story.",
+                    })}
                 </p>
 
-                <StoryWizard
-                    onCancel={() => setMode("select")}
-                />
+                <StoryWizard onCancel={() => setMode("select")} />
             </div>
         );
     }
@@ -295,7 +394,7 @@ export default function NewBookPage() {
     // Import mode
     if (mode === "import") {
         return (
-            <div className="container mx-auto py-8 px-4 max-w-2xl">
+            <div className="creation-form-page container mx-auto py-10 px-5 max-w-2xl">
                 <button
                     onClick={() => {
                         setMode("select");
@@ -316,7 +415,12 @@ export default function NewBookPage() {
                                 <Upload className="h-6 w-6 text-white" />
                             </div>
                             <div>
-                                <CardTitle className="text-2xl">{t({ de: "Werk importieren", en: "Import work" })}</CardTitle>
+                                <CardTitle className="text-2xl">
+                                    {t({
+                                        de: "Werk importieren",
+                                        en: "Import work",
+                                    })}
+                                </CardTitle>
                                 <CardDescription>
                                     {t({
                                         de: "Lade dein bestehendes Werk hoch und wir teilen es automatisch in Kapitel auf.",
@@ -331,12 +435,21 @@ export default function NewBookPage() {
                         {importResult?.success && (
                             <div className="flex flex-col items-center py-8 text-center">
                                 <CheckCircle2 className="h-16 w-16 text-green-500 mb-4" />
-                                <h3 className="text-xl font-semibold mb-2">{t({ de: "Import erfolgreich!", en: "Import successful!" })}</h3>
+                                <h3 className="text-xl font-semibold mb-2">
+                                    {t({
+                                        de: "Import erfolgreich!",
+                                        en: "Import successful!",
+                                    })}
+                                </h3>
                                 <p className="text-muted-foreground mb-6">
                                     {importResult.message}
                                 </p>
                                 <Button
-                                    onClick={() => router.push(`/books/${importResult.bookId}` as Route)}
+                                    onClick={() =>
+                                        router.push(
+                                            `/books/${importResult.bookId}` as Route,
+                                        )
+                                    }
                                     size="lg"
                                 >
                                     {t({ de: "Zum Buch", en: "Go to book" })}
@@ -357,7 +470,12 @@ export default function NewBookPage() {
                             <>
                                 {/* File Upload */}
                                 <div className="space-y-2">
-                                    <Label>{t({ de: "Datei auswählen", en: "Select file" })}</Label>
+                                    <Label>
+                                        {t({
+                                            de: "Datei auswählen",
+                                            en: "Select file",
+                                        })}
+                                    </Label>
                                     <input
                                         ref={fileInputRef}
                                         type="file"
@@ -370,28 +488,68 @@ export default function NewBookPage() {
                                         <div className="flex items-center gap-4 p-4 rounded-lg border bg-muted/50">
                                             {getFileIcon(selectedFile.name)}
                                             <div className="flex-1 min-w-0">
-                                                <p className="font-medium truncate">{selectedFile.name}</p>
+                                                <p className="font-medium truncate">
+                                                    {selectedFile.name}
+                                                </p>
                                                 <p className="text-sm text-muted-foreground">
-                                                    {(selectedFile.size / 1024).toFixed(1)} KB
+                                                    {(
+                                                        selectedFile.size / 1024
+                                                    ).toFixed(1)}{" "}
+                                                    KB
                                                 </p>
                                             </div>
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
-                                                onClick={() => fileInputRef.current?.click()}
+                                                onClick={() =>
+                                                    fileInputRef.current?.click()
+                                                }
                                             >
-                                                {t({ de: "Ändern", en: "Change" })}
+                                                {t({
+                                                    de: "Ändern",
+                                                    en: "Change",
+                                                })}
                                             </Button>
                                         </div>
                                     ) : (
                                         <div
-                                            onClick={() => fileInputRef.current?.click()}
+                                            role="button"
+                                            tabIndex={0}
+                                            onKeyDown={(e) => {
+                                                if (
+                                                    e.key === "Enter" ||
+                                                    e.key === " "
+                                                ) {
+                                                    e.preventDefault();
+                                                    fileInputRef.current?.click();
+                                                }
+                                            }}
+                                            onDragOver={(e) =>
+                                                e.preventDefault()
+                                            }
+                                            onDrop={(e) => {
+                                                e.preventDefault();
+                                                selectFile(
+                                                    e.dataTransfer.files[0],
+                                                );
+                                            }}
+                                            onClick={() =>
+                                                fileInputRef.current?.click()
+                                            }
                                             className="flex flex-col items-center justify-center p-8 rounded-lg border-2 border-dashed cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors"
                                         >
                                             <Upload className="h-10 w-10 text-muted-foreground mb-3" />
-                                            <p className="font-medium">{t({ de: "Datei hier ablegen oder klicken", en: "Drop file here or click" })}</p>
+                                            <p className="font-medium">
+                                                {t({
+                                                    de: "Datei hier ablegen oder klicken",
+                                                    en: "Drop file here or click",
+                                                })}
+                                            </p>
                                             <p className="text-sm text-muted-foreground mt-1">
-                                                {t({ de: "DOCX, TXT oder Markdown", en: "DOCX, TXT, or Markdown" })}
+                                                {t({
+                                                    de: "DOCX, TXT oder Markdown",
+                                                    en: "DOCX, TXT, or Markdown",
+                                                })}
                                             </p>
                                         </div>
                                     )}
@@ -399,12 +557,22 @@ export default function NewBookPage() {
 
                                 {/* Title */}
                                 <div className="space-y-2">
-                                    <Label htmlFor="import-title">{t({ de: "Buchtitel", en: "Book title" })}</Label>
+                                    <Label htmlFor="import-title">
+                                        {t({
+                                            de: "Buchtitel",
+                                            en: "Book title",
+                                        })}
+                                    </Label>
                                     <Input
                                         id="import-title"
-                                        placeholder={t({ de: "Titel des importierten Buches", en: "Title of imported book" })}
+                                        placeholder={t({
+                                            de: "Titel des importierten Buches",
+                                            en: "Title of imported book",
+                                        })}
                                         value={importTitle}
-                                        onChange={(e) => setImportTitle(e.target.value)}
+                                        onChange={(e) =>
+                                            setImportTitle(e.target.value)
+                                        }
                                     />
                                     <p className="text-xs text-muted-foreground">
                                         {t({
@@ -416,11 +584,31 @@ export default function NewBookPage() {
 
                                 {/* Info Box */}
                                 <div className="p-4 rounded-lg bg-muted/50 text-sm space-y-2">
-                                    <p className="font-medium">{t({ de: "Automatische Kapitelaufteilung:", en: "Automatic chapter splitting:" })}</p>
+                                    <p className="font-medium">
+                                        {t({
+                                            de: "Automatische Kapitelaufteilung:",
+                                            en: "Automatic chapter splitting:",
+                                        })}
+                                    </p>
                                     <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                                        <li>{t({ de: "Kapitel werden anhand von Überschriften erkannt", en: "Chapters are detected by headings" })}</li>
-                                        <li>{t({ de: "Auch \"Kapitel X\" / \"Chapter X\" werden erkannt", en: "Also recognizes \"Kapitel X\" / \"Chapter X\"" })}</li>
-                                        <li>{t({ de: "Formatierung (Fett, Kursiv) wird beibehalten", en: "Formatting (bold, italic) is preserved" })}</li>
+                                        <li>
+                                            {t({
+                                                de: "Kapitel werden anhand von Überschriften erkannt",
+                                                en: "Chapters are detected by headings",
+                                            })}
+                                        </li>
+                                        <li>
+                                            {t({
+                                                de: 'Auch "Kapitel X" / "Chapter X" werden erkannt',
+                                                en: 'Also recognizes "Kapitel X" / "Chapter X"',
+                                            })}
+                                        </li>
+                                        <li>
+                                            {t({
+                                                de: "Formatierung (Fett, Kursiv) wird beibehalten",
+                                                en: "Formatting (bold, italic) is preserved",
+                                            })}
+                                        </li>
                                     </ul>
                                 </div>
 
@@ -440,7 +628,9 @@ export default function NewBookPage() {
                                         onClick={handleImport}
                                         disabled={!selectedFile || isImporting}
                                     >
-                                        {isImporting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                        {isImporting && (
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        )}
                                         {t({ de: "Importieren", en: "Import" })}
                                     </Button>
                                 </div>
@@ -454,7 +644,7 @@ export default function NewBookPage() {
 
     // Manual creation mode
     return (
-        <div className="container mx-auto py-8 px-4 max-w-2xl">
+        <div className="creation-form-page container mx-auto py-10 px-5 max-w-2xl">
             <button
                 onClick={() => setMode("select")}
                 className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 transition-colors"
@@ -465,7 +655,12 @@ export default function NewBookPage() {
 
             <Card>
                 <CardHeader>
-                    <CardTitle className="text-2xl">{t({ de: "Neues Buch erstellen", en: "Create a new book" })}</CardTitle>
+                    <CardTitle className="text-2xl">
+                        {t({
+                            de: "Neues Buch erstellen",
+                            en: "Create a new book",
+                        })}
+                    </CardTitle>
                     <CardDescription>
                         {t({
                             de: "Gib deinem Buchprojekt einen Namen und optional weitere Details.",
@@ -476,65 +671,127 @@ export default function NewBookPage() {
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div className="space-y-2">
-                            <Label htmlFor="title">{t({ de: "Titel *", en: "Title *" })}</Label>
+                            <Label htmlFor="title">
+                                {t({ de: "Titel *", en: "Title *" })}
+                            </Label>
                             <Input
                                 id="title"
-                                placeholder={t({ de: "Der Titel deines Buches", en: "Your book's title" })}
+                                placeholder={t({
+                                    de: "Der Titel deines Buches",
+                                    en: "Your book's title",
+                                })}
                                 value={formData.title}
-                                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                                onChange={(e) =>
+                                    setFormData({
+                                        ...formData,
+                                        title: e.target.value,
+                                    })
+                                }
                                 required
                             />
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="description">{t({ de: "Beschreibung", en: "Description" })}</Label>
+                            <Label htmlFor="description">
+                                {t({ de: "Beschreibung", en: "Description" })}
+                            </Label>
                             <textarea
                                 id="description"
-                                placeholder={t({ de: "Worum geht es in deinem Buch?", en: "What is your book about?" })}
+                                placeholder={t({
+                                    de: "Worum geht es in deinem Buch?",
+                                    en: "What is your book about?",
+                                })}
                                 value={formData.description}
-                                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                onChange={(e) =>
+                                    setFormData({
+                                        ...formData,
+                                        description: e.target.value,
+                                    })
+                                }
                                 className="w-full min-h-24 px-3 py-2 rounded-md border border-input bg-background text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                             />
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <Label htmlFor="genre">{t({ de: "Genre", en: "Genre" })}</Label>
+                                <Label htmlFor="genre">
+                                    {t({ de: "Genre", en: "Genre" })}
+                                </Label>
                                 <Input
                                     id="genre"
-                                    placeholder={t({ de: "z.B. Fantasy, Krimi, Roman", en: "e.g. Fantasy, Mystery, Novel" })}
+                                    placeholder={t({
+                                        de: "z.B. Fantasy, Krimi, Roman",
+                                        en: "e.g. Fantasy, Mystery, Novel",
+                                    })}
                                     value={formData.genre}
-                                    onChange={(e) => setFormData({ ...formData, genre: e.target.value })}
+                                    onChange={(e) =>
+                                        setFormData({
+                                            ...formData,
+                                            genre: e.target.value,
+                                        })
+                                    }
                                 />
                             </div>
 
                             <div className="space-y-2">
-                                <Label htmlFor="targetAudience">{t({ de: "Zielgruppe", en: "Target audience" })}</Label>
+                                <Label htmlFor="targetAudience">
+                                    {t({
+                                        de: "Zielgruppe",
+                                        en: "Target audience",
+                                    })}
+                                </Label>
                                 <Input
                                     id="targetAudience"
-                                    placeholder={t({ de: "z.B. Jugendliche, Erwachsene", en: "e.g. Teens, adults" })}
+                                    placeholder={t({
+                                        de: "z.B. Jugendliche, Erwachsene",
+                                        en: "e.g. Teens, adults",
+                                    })}
                                     value={formData.targetAudience}
-                                    onChange={(e) => setFormData({ ...formData, targetAudience: e.target.value })}
+                                    onChange={(e) =>
+                                        setFormData({
+                                            ...formData,
+                                            targetAudience: e.target.value,
+                                        })
+                                    }
                                 />
                             </div>
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="writingStyle">{t({ de: "Schreibstil", en: "Writing style" })}</Label>
+                            <Label htmlFor="writingStyle">
+                                {t({ de: "Schreibstil", en: "Writing style" })}
+                            </Label>
                             <Input
                                 id="writingStyle"
-                                placeholder={t({ de: "z.B. Humorvoll, Spannend, Poetisch", en: "e.g. Humorous, Suspenseful, Poetic" })}
+                                placeholder={t({
+                                    de: "z.B. Humorvoll, Spannend, Poetisch",
+                                    en: "e.g. Humorous, Suspenseful, Poetic",
+                                })}
                                 value={formData.writingStyle}
-                                onChange={(e) => setFormData({ ...formData, writingStyle: e.target.value })}
+                                onChange={(e) =>
+                                    setFormData({
+                                        ...formData,
+                                        writingStyle: e.target.value,
+                                    })
+                                }
                             />
                         </div>
 
                         <div className="flex justify-end gap-4 pt-4">
-                            <Button type="button" variant="outline" onClick={() => setMode("select")}>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setMode("select")}
+                            >
                                 {t({ de: "Abbrechen", en: "Cancel" })}
                             </Button>
-                            <Button type="submit" disabled={isLoading || !formData.title.trim()}>
-                                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            <Button
+                                type="submit"
+                                disabled={isLoading || !formData.title.trim()}
+                            >
+                                {isLoading && (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                )}
                                 {t({ de: "Buch erstellen", en: "Create book" })}
                             </Button>
                         </div>

@@ -67,5 +67,5 @@ export default async function BookEditorPage({ params }: PageProps) {
         notFound();
     }
 
-    return <BookEditorLayout book={book} />;
+    return <BookEditorLayout key={book.id} book={book} />;
 }

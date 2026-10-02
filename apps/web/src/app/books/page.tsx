@@ -1,373 +1,666 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import {
-    Plus,
-    BookOpen,
-    Users,
-    Sparkles,
-    Trash2,
-    Loader2,
-    Search,
-    Filter,
-    Calendar,
-    ArrowUpRight
+  ArrowDownAZ,
+  ArrowRight,
+  ArrowUpRight,
+  BookOpen,
+  FileText,
+  LayoutGrid,
+  List,
+  Loader2,
+  Plus,
+  Search,
+  Sparkles,
+  Trash2,
+  Users,
+  X,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-
-import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger
-} from "@/components/ui/dropdown-menu";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { BookCover } from "@/components/book-cover";
 import { useI18n } from "@/components/locale-provider";
+import { cn } from "@/lib/utils";
 
 type Book = {
-    id: string;
-    title: string;
-    description: string | null;
-    genre: string | null;
-    updatedAt: string;
-    coverUrl: string | null;
-    _count: {
-        chapters: number;
-        characters: number;
-    };
+  id: string;
+  title: string;
+  author: string | null;
+  description: string | null;
+  genre: string | null;
+  updatedAt: string;
+  createdAt: string;
+  coverUrl: string | null;
+  _count: { chapters: number; characters: number };
 };
 
 export default function BooksPage() {
-    const { t, intlLocale } = useI18n();
-    const [books, setBooks] = useState<Book[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [searchQuery, setSearchQuery] = useState("");
-    const [sortBy, setSortBy] = useState<"updated" | "title" | "newest">("updated");
-    const [deletingId, setDeletingId] = useState<string | null>(null);
+  const { t, intlLocale } = useI18n();
+  const [books, setBooks] = useState<Book[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [genre, setGenre] = useState("all");
+  const [sortBy, setSortBy] = useState("updated");
+  const [view, setView] = useState<"grid" | "list">("grid");
+  const [deleteBook, setDeleteBook] = useState<Book | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-    useEffect(() => {
-        async function loadBooks() {
-            try {
-                const response = await fetch("/api/books");
-                if (response.ok) {
-                    const data = await response.json();
-                    setBooks(data);
-                }
-            } catch (error) {
-                console.error("Error loading books:", error);
-            } finally {
-                setIsLoading(false);
-            }
-        }
-        loadBooks();
-    }, []);
-
-    const handleDelete = async (e: React.MouseEvent, bookId: string) => {
-        e.preventDefault(); // Prevent link navigation
-        e.stopPropagation();
-
-        if (!confirm(t({
-            de: "Bist du sicher, dass du dieses Buch löschen möchtest? Alle Daten werden unwiderruflich gelöscht.",
-            en: "Are you sure you want to delete this book? All data will be permanently removed.",
-        }))) {
-            return;
-        }
-
-        setDeletingId(bookId);
-        try {
-            const response = await fetch(`/api/books/${bookId}`, {
-                method: "DELETE",
-            });
-
-            if (response.ok) {
-                setBooks((prev) => prev.filter((b) => b.id !== bookId));
-            } else {
-                alert(t({ de: "Fehler beim Löschen des Buchs", en: "Failed to delete the book" }));
-            }
-        } catch (error) {
-            console.error("Error deleting book:", error);
-            alert(t({ de: "Fehler beim Löschen des Buchs", en: "Failed to delete the book" }));
-        } finally {
-            setDeletingId(null);
-        }
-    };
-
-    const filteredBooks = useMemo(() => {
-        let filtered = books.filter(book =>
-            book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            book.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            book.genre?.toLowerCase().includes(searchQuery.toLowerCase())
-        );
-
-        return filtered.sort((a, b) => {
-            if (sortBy === "title") return a.title.localeCompare(b.title);
-            if (sortBy === "newest") return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-            return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-        });
-    }, [books, searchQuery, sortBy]);
-
-    const sortLabel = sortBy === "updated"
-        ? t({ de: "Zuletzt bearbeitet", en: "Recently updated" })
-        : sortBy === "newest"
-            ? t({ de: "Neueste", en: "Newest" })
-            : t({ de: "Titel", en: "Title" });
-
-    if (isLoading) {
-        return (
-            <div className="flex flex-col items-center justify-center min-h-[60vh]">
-                <div className="relative mb-6">
-                    <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                    <div className="absolute inset-0 bg-primary/20 rounded-full filter blur-md animate-pulse" />
-                </div>
-                <p className="text-muted-foreground font-medium animate-pulse">
-                    {t({ de: "Lade deine Bibliothek...", en: "Loading your library..." })}
-                </p>
-            </div>
-        );
+  const loadBooks = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(false);
+    try {
+      const response = await fetch("/api/books");
+      if (!response.ok) throw new Error("Unable to load books");
+      setBooks(await response.json());
+    } catch {
+      setLoadError(true);
+    } finally {
+      setIsLoading(false);
     }
+  }, []);
+  useEffect(() => {
+    void loadBooks();
+  }, [loadBooks]);
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("forge-library-view");
+      if (saved === "list") setView(saved);
+    } catch {
+      /* Storage may be unavailable. */
+    }
+  }, []);
+  const changeView = (value: "grid" | "list") => {
+    setView(value);
+    try {
+      localStorage.setItem("forge-library-view", value);
+    } catch {
+      /* Keep session preference. */
+    }
+  };
+  const genres = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          books
+            .map((b) => b.genre)
+            .filter((value): value is string => Boolean(value)),
+        ),
+      ).sort((a, b) => a.localeCompare(b, intlLocale)),
+    [books, intlLocale],
+  );
+  const filteredBooks = useMemo(
+    () =>
+      books
+        .filter((book) => {
+          const text = [book.title, book.description, book.genre, book.author]
+            .filter(Boolean)
+            .join(" ")
+            .toLocaleLowerCase(intlLocale);
+          return (
+            text.includes(searchQuery.trim().toLocaleLowerCase(intlLocale)) &&
+            (genre === "all" || book.genre === genre)
+          );
+        })
+        .sort((a, b) =>
+          sortBy === "title"
+            ? a.title.localeCompare(b.title, intlLocale)
+            : new Date(
+                sortBy === "newest" ? b.createdAt : b.updatedAt,
+              ).getTime() -
+              new Date(
+                sortBy === "newest" ? a.createdAt : a.updatedAt,
+              ).getTime(),
+        ),
+    [books, searchQuery, genre, sortBy, intlLocale],
+  );
+  const latestBook = useMemo(
+    () =>
+      [...books].sort(
+        (a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt),
+      )[0],
+    [books],
+  );
+  const totals = books.reduce(
+    (sum, book) => ({
+      chapters: sum.chapters + book._count.chapters,
+      characters: sum.characters + book._count.characters,
+    }),
+    { chapters: 0, characters: 0 },
+  );
+  const resetFilters = () => {
+    setSearchQuery("");
+    setGenre("all");
+  };
+  const handleDelete = async () => {
+    if (!deleteBook) return;
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`/api/books/${deleteBook.id}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) throw new Error("Delete failed");
+      setBooks((previous) =>
+        previous.filter((book) => book.id !== deleteBook.id),
+      );
+      if (
+        genre === deleteBook.genre &&
+        books.filter((book) => book.genre === genre).length === 1
+      )
+        setGenre("all");
+      setDeleteBook(null);
+      toast.success(
+        t({ de: "Buchprojekt gelöscht", en: "Book project deleted" }),
+      );
+    } catch {
+      toast.error(
+        t({
+          de: "Das Buch konnte nicht gelöscht werden. Bitte versuche es erneut.",
+          en: "The book could not be deleted. Please try again.",
+        }),
+      );
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
-    return (
-        <div className="min-h-screen bg-background relative overflow-hidden pb-16">
-            
-            {/* Soft Ambient Candlelight Glows */}
-            <div className="ambient-glow-amber top-[10%] right-[10%]" />
-            <div className="ambient-glow-violet bottom-[15%] left-[5%]" />
-
-            <div className="container mx-auto py-10 px-4 sm:px-6 lg:px-8 relative z-10">
-                
-                {/* Header Section / Sanctuary Study */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
-                    <div className="space-y-3">
-                        <motion.h1
-                            initial={{ opacity: 0, y: -15 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="text-4xl sm:text-5xl font-serif font-black tracking-tight bg-gradient-to-r from-foreground via-foreground to-stone-500 bg-clip-text text-transparent"
-                        >
-                            {t({ de: "Deine Bibliothek", en: "Your library" })}
-                        </motion.h1>
-                        <motion.p
-                            initial={{ opacity: 0, y: 15 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.1 }}
-                            className="text-md sm:text-lg text-muted-foreground font-serif max-w-xl leading-relaxed"
-                        >
-                            {t({
-                                de: "Verwalte deine Buchprojekte und erschaffe neue Welten mit feinfühliger KI-Unterstützung.",
-                                en: "Manage your book projects and create new worlds with gentle AI support.",
-                            })}
-                        </motion.p>
-                    </div>
-
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: 0.15 }}
-                        className="flex gap-3"
-                    >
-                        <Link href={"/books/new" as Route}>
-                            <Button size="lg" className="rounded-full shadow-lg shadow-primary/10 hover:shadow-primary/20 hover:scale-102 transition-all duration-300 font-medium px-6 py-5.5 bg-primary text-primary-foreground">
-                                <Plus className="h-5 w-5 mr-2" />
-                                {t({ de: "Neues Buch", en: "New book" })}
-                            </Button>
-                        </Link>
-                    </motion.div>
-                </div>
-
-                {/* Search & Sort Capsule - Glass Floating Overlay */}
-                <motion.div
-                    initial={{ opacity: 0, y: 15 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 }}
-                    className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-10 p-3 rounded-2xl bg-card/65 dark:bg-card/45 backdrop-blur-xl border border-border/40 shadow-md"
-                >
-                    <div className="relative w-full sm:w-96 group">
-                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                        <Input
-                            placeholder={t({ de: "Suchen nach Titel, Genre...", en: "Search by title, genre..." })}
-                            className="pl-10.5 bg-secondary/35 border-transparent focus:bg-background focus:border-border/55 focus:ring-0 transition-all rounded-xl h-10.5 text-sm"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                    </div>
-
-                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                        <DropdownMenu>
-                            <DropdownMenuTrigger
-                                render={
-                                    <Button variant="ghost" className="gap-2 rounded-xl text-sm border border-border/30 px-4 h-10.5 hover:bg-secondary/45" />
-                                }
-                            >
-                                <Filter className="h-4 w-4 text-muted-foreground" />
-                                <span className="font-medium text-foreground">{t({ de: "Sortieren", en: "Sort" })}: {sortLabel}</span>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-52 rounded-xl border-border/40 shadow-xl">
-                                <DropdownMenuLabel className="font-semibold text-xs text-muted-foreground">{t({ de: "Sortieren nach", en: "Sort by" })}</DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem className="rounded-lg text-sm" onClick={() => setSortBy("updated")}>
-                                    {t({ de: "Zuletzt bearbeitet", en: "Recently updated" })}
-                                </DropdownMenuItem>
-                                <DropdownMenuItem className="rounded-lg text-sm" onClick={() => setSortBy("newest")}>
-                                    {t({ de: "Erstellt am", en: "Date created" })}
-                                </DropdownMenuItem>
-                                <DropdownMenuItem className="rounded-lg text-sm" onClick={() => setSortBy("title")}>
-                                    {t({ de: "Titel (A-Z)", en: "Title (A-Z)" })}
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
-                </motion.div>
-
-                {/* Book Grid bookshelf */}
-                {books.length === 0 ? (
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="flex flex-col items-center justify-center py-20 text-center rounded-3xl border border-dashed border-border/50 bg-card/10 p-8"
-                    >
-                        <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-accent/50 to-secondary flex items-center justify-center mb-6 shadow-inner relative overflow-hidden">
-                            <div className="absolute inset-0 bg-primary/5 animate-pulse" />
-                            <BookOpen className="h-8 w-8 text-primary/70 relative z-10" />
-                        </div>
-                        <h3 className="text-xl font-bold font-serif mb-2 text-foreground">
-                            {t({ de: "Deine Bibliothek ist leer", en: "Your library is empty" })}
-                        </h3>
-                        <p className="text-muted-foreground font-serif max-w-sm mb-8 text-sm leading-relaxed">
-                            {t({
-                                de: "Der Anfang ist oft das Schwerste. Erstelle dein erstes Buchprojekt und lass deiner Kreativität freien Lauf.",
-                                en: "The beginning is often the hardest. Create your first book project and let your creativity run free.",
-                            })}
-                        </p>
-                        <Link href={"/books/new" as Route}>
-                            <Button className="gap-2 rounded-full px-6 shadow-md hover:shadow-lg transition-all bg-primary text-primary-foreground font-semibold">
-                                <Plus className="h-4 w-4" />
-                                {t({ de: "Erstes Buch erstellen", en: "Create your first book" })}
-                            </Button>
-                        </Link>
-                    </motion.div>
-                ) : (
-                    <div 
-                        className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8"
-                        style={{ perspective: "1200px" }}
-                    >
-                        <AnimatePresence>
-                            {filteredBooks.map((book, index) => (
-                                <motion.div
-                                    key={book.id}
-                                    layout
-                                    initial={{ opacity: 0, y: 30 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0, scale: 0.9 }}
-                                    transition={{ type: "spring", stiffness: 100, damping: 16, delay: index * 0.04 }}
-                                    whileHover={{ 
-                                        y: -8,
-                                        rotateY: -10,
-                                        rotateX: 2,
-                                        scale: 1.025,
-                                        transition: { duration: 0.25, ease: "easeOut" }
-                                    }}
-                                    className="h-full"
-                                    style={{ transformStyle: "preserve-3d" }}
-                                >
-                                    <Link href={`/books/${book.id}` as Route} className="group block h-full select-none">
-                                        
-                                        {/* 3D HARDCOVER VIRTUAL BOOK */}
-                                        <div className="relative h-full min-h-[380px] bg-card rounded-2xl border border-border/45 overflow-hidden shadow-md group-hover:shadow-2xl transition-shadow duration-300 flex flex-col justify-between paper-texture">
-                                            
-                                            {/* Book Binding Spine effect (Wow factor) */}
-                                            <div className="book-binding-line" />
-
-                                            {/* Top Banner Cover Art */}
-                                            <div className="relative h-44 w-full overflow-hidden bg-secondary/20">
-                                                {!book.coverUrl && (
-                                                    <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-secondary to-chart-1/10 group-hover:scale-105 transition-transform duration-700" />
-                                                )}
-                                                {book.coverUrl && (
-                                                    <img
-                                                        src={book.coverUrl}
-                                                        alt={book.title}
-                                                        className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                                                    />
-                                                )}
-                                                <div className="absolute inset-0 bg-gradient-to-t from-card via-black/0 to-black/10" />
-
-                                                {/* Genre Seal Pressed Label */}
-                                                {book.genre && (
-                                                    <div className="absolute top-4 left-5 z-10">
-                                                        <span className="px-3 py-1 rounded-full text-[9px] font-semibold tracking-wider uppercase bg-card/90 dark:bg-card text-primary border border-primary/10 shadow-sm">
-                                                            {book.genre}
-                                                        </span>
-                                                    </div>
-                                                )}
-
-                                                {/* Trash Icon Button - Fades in on Hover */}
-                                                <div className="absolute top-4 right-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                                                    <Button
-                                                        variant="secondary"
-                                                        size="icon"
-                                                        className="h-8.5 w-8.5 rounded-full bg-card/95 border border-border text-destructive hover:bg-destructive hover:text-white shadow-md"
-                                                        onClick={(e) => handleDelete(e, book.id)}
-                                                        disabled={deletingId === book.id}
-                                                    >
-                                                        {deletingId === book.id ? (
-                                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                                        ) : (
-                                                            <Trash2 className="h-3.5 w-3.5" />
-                                                        )}
-                                                    </Button>
-                                                </div>
-                                            </div>
-
-                                            {/* Content Block / Pages of the Cover */}
-                                            <div className="p-6 pt-2 flex-1 flex flex-col justify-between pl-8">
-                                                <div>
-                                                    <h3 className="font-serif font-black text-xl leading-tight mb-2.5 text-foreground group-hover:text-primary transition-colors line-clamp-2" title={book.title}>
-                                                        {book.title}
-                                                    </h3>
-                                                    {book.description && (
-                                                        <p className="text-xs text-muted-foreground font-serif line-clamp-3 leading-relaxed mb-4">
-                                                            {book.description}
-                                                        </p>
-                                                    )}
-                                                </div>
-
-                                                <div className="pt-4 border-t border-border/40">
-                                                    {/* Count Widgets */}
-                                                    <div className="flex items-center gap-4 text-[11px] text-muted-foreground font-serif mb-4.5">
-                                                        <div className="flex items-center gap-1.5 hover:text-primary transition-colors">
-                                                            <BookOpen className="h-3.5 w-3.5" />
-                                                            <span className="font-semibold">{book._count.chapters} {t({ de: "Kap.", en: "Ch." })}</span>
-                                                        </div>
-                                                        <div className="flex items-center gap-1.5 hover:text-primary transition-colors">
-                                                            <Users className="h-3.5 w-3.5" />
-                                                            <span className="font-semibold">{book._count.characters} {t({ de: "Char.", en: "Chars." })}</span>
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Bottom Row: Date & Open */}
-                                                    <div className="flex items-center justify-between">
-                                                        <div className="flex items-center gap-1.5 text-[9px] font-mono tracking-wider uppercase text-muted-foreground/80">
-                                                            <Calendar className="h-3 w-3" />
-                                                            <span>{new Date(book.updatedAt).toLocaleDateString(intlLocale)}</span>
-                                                        </div>
-                                                        <div className="flex items-center text-primary text-xs font-semibold opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-[-8px] group-hover:translate-x-0">
-                                                            {t({ de: "Öffnen", en: "Open" })} <ArrowUpRight className="ml-1 h-3.5 w-3.5 animate-pulse" />
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </Link>
-                                </motion.div>
-                            ))}
-                        </AnimatePresence>
-                    </div>
-                )}
-            </div>
+  return (
+    <main className="library-page">
+      <div className="page-heading">
+        <div>
+          <div className="page-eyebrow">
+            <span className="status-dot" />
+            YOUR NEXT CHAPTER
+          </div>
+          <h1>
+            {t({
+              de: "Deine Geschichten beginnen hier.",
+              en: "Your stories start here.",
+            })}
+          </h1>
+          <p>
+            {t({
+              de: "Große Ideen verdienen einen Ort, an dem sie wachsen können.",
+              en: "Great ideas deserve a place to grow.",
+            })}
+          </p>
         </div>
-    );
+        <Link
+          href="/books/new"
+          className={cn(buttonVariants({ size: "lg" }), "new-project-button")}
+        >
+          <Plus size={18} />
+          {t({ de: "Neues Buch", en: "New book" })}
+        </Link>
+      </div>
+
+      <section className="library-hero" aria-labelledby="hero-heading">
+        <div className="hero-copy">
+          <span className="hero-kicker">
+            <Sparkles size={14} />
+            {t({
+              de: "VON DER IDEE ZUM MANUSKRIPT",
+              en: "FROM IDEA TO MANUSCRIPT",
+            })}
+          </span>
+          <h2 id="hero-heading">
+            {t({ de: "Eine Idee ist erst", en: "An idea is just" })}
+            <br />
+            <span>{t({ de: "der Anfang.", en: "the beginning." })}</span>
+          </h2>
+          <p>
+            {t({
+              de: "Erschaffe Welten. Gib Figuren eine Stimme. Schreib das Buch, das nur du schreiben kannst.",
+              en: "Build worlds. Give characters a voice. Write the book only you can write.",
+            })}
+          </p>
+          <Link
+            href={
+              latestBook ? (`/books/${latestBook.id}` as Route) : "/books/new"
+            }
+            className="hero-action"
+          >
+            {latestBook
+              ? t({ de: "Weiterschreiben", en: "Keep writing" })
+              : t({
+                  de: "Dein erstes Kapitel",
+                  en: "Start your first chapter",
+                })}
+            <ArrowUpRight size={18} />
+          </Link>
+          <span className="hero-footnote">
+            {latestBook
+              ? latestBook.title
+              : t({
+                  de: "Deine Geschichte. Dein Tempo. Dein Studio.",
+                  en: "Your story. Your pace. Your studio.",
+                })}
+          </span>
+        </div>
+        <div className="hero-art" aria-hidden="true">
+          <div className="hero-art-ring" />
+          <BookCover
+            title={t({ de: "Zwischen den Sternen", en: "Between the stars" })}
+            genre="SCIENCE FICTION"
+            className="hero-book hero-book-back"
+            decorative
+          />
+          <BookCover
+            title={t({
+              de: "Alles, was noch kommt",
+              en: "All that lies ahead",
+            })}
+            genre="A NEW STORY"
+            className="hero-book hero-book-front"
+            decorative
+          />
+          <span className="hero-art-caption">
+            <span />
+            MADE OF IDEAS.
+          </span>
+          <Sparkles className="hero-spark" size={30} />
+        </div>
+        <span className="hero-index" aria-hidden="true">
+          01 — CREATE SOMETHING GREAT
+        </span>
+      </section>
+
+      <div
+        className="library-stats"
+        aria-label={t({
+          de: "Deine Bibliothek in Zahlen",
+          en: "Your library in numbers",
+        })}
+      >
+        {[
+          {
+            icon: BookOpen,
+            value: books.length,
+            label: t({ de: "Buchprojekte", en: "Book projects" }),
+            tone: "mint",
+          },
+          {
+            icon: FileText,
+            value: totals.chapters,
+            label: t({ de: "Kapitel voller Ideen", en: "Chapters of ideas" }),
+            tone: "violet",
+          },
+          {
+            icon: Users,
+            value: totals.characters,
+            label: t({
+              de: "Charaktere mit Geschichte",
+              en: "Characters with a story",
+            }),
+            tone: "peach",
+          },
+        ].map(({ icon: Icon, value, label, tone }) => (
+          <div className="library-stat" key={tone}>
+            <span className={`stat-icon stat-${tone}`}>
+              <Icon size={20} />
+            </span>
+            <div>
+              <strong>
+                {isLoading
+                  ? "—"
+                  : loadError
+                    ? "—"
+                    : value.toLocaleString(intlLocale)}
+              </strong>
+              <span>{label}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <section
+        className="library-collection"
+        aria-labelledby="collection-heading"
+      >
+        <div className="collection-heading">
+          <div>
+            <h2 id="collection-heading">
+              {t({ de: "Deine Bibliothek", en: "Your library" })}
+              <span>{isLoading ? "…" : books.length}</span>
+            </h2>
+            <p>
+              {t({
+                de: "Aus Gedanken werden Geschichten.",
+                en: "Where thoughts become stories.",
+              })}
+            </p>
+          </div>
+          <div
+            className="view-switch"
+            role="group"
+            aria-label={t({ de: "Ansicht", en: "View" })}
+          >
+            <button
+              onClick={() => changeView("grid")}
+              aria-pressed={view === "grid"}
+              aria-label={t({ de: "Kartenansicht", en: "Grid view" })}
+            >
+              <LayoutGrid size={17} />
+            </button>
+            <button
+              onClick={() => changeView("list")}
+              aria-pressed={view === "list"}
+              aria-label={t({ de: "Listenansicht", en: "List view" })}
+            >
+              <List size={19} />
+            </button>
+          </div>
+        </div>
+        <div className="collection-toolbar">
+          <div className="library-search">
+            <Search size={18} />
+            <Input
+              id="book-search"
+              aria-label={t({
+                de: "Bibliothek durchsuchen",
+                en: "Search library",
+              })}
+              placeholder={t({
+                de: "Titel, Genre oder Idee suchen …",
+                en: "Search title, genre or idea …",
+              })}
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                aria-label={t({ de: "Suche löschen", en: "Clear search" })}
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+          <div className="library-sort">
+            <ArrowDownAZ size={16} />
+            <select
+              aria-label={t({ de: "Sortieren nach", en: "Sort by" })}
+              value={sortBy}
+              onChange={(event) => setSortBy(event.target.value)}
+            >
+              <option value="updated">
+                {t({ de: "Zuletzt bearbeitet", en: "Recently updated" })}
+              </option>
+              <option value="newest">
+                {t({ de: "Zuletzt erstellt", en: "Newest created" })}
+              </option>
+              <option value="title">
+                {t({ de: "Titel A–Z", en: "Title A–Z" })}
+              </option>
+            </select>
+          </div>
+        </div>
+        {genres.length > 0 && (
+          <div
+            className="genre-filters"
+            role="group"
+            aria-label={t({ de: "Nach Genre filtern", en: "Filter by genre" })}
+          >
+            {["all", ...genres].map((value) => (
+              <button
+                key={value}
+                onClick={() => setGenre(value)}
+                aria-pressed={genre === value}
+              >
+                {value === "all"
+                  ? t({ de: "Alle Projekte", en: "All projects" })
+                  : value}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="sr-only" role="status" aria-live="polite">
+          {!isLoading &&
+            t(
+              {
+                de: "{{count}} Buchprojekte gefunden",
+                en: "{{count}} book projects found",
+              },
+              { count: filteredBooks.length },
+            )}
+        </div>
+        {isLoading ? (
+          <div
+            className="book-grid"
+            aria-busy="true"
+            aria-label={t({
+              de: "Bibliothek wird geladen",
+              en: "Loading library",
+            })}
+          >
+            {[1, 2, 3].map((key) => (
+              <div className="book-skeleton" key={key}>
+                <div />
+                <span />
+                <span />
+              </div>
+            ))}
+          </div>
+        ) : loadError ? (
+          <div className="library-empty" role="alert">
+            <BookOpen size={32} />
+            <h3>
+              {t({
+                de: "Deine Bibliothek ist gerade nicht erreichbar.",
+                en: "Your library is currently unavailable.",
+              })}
+            </h3>
+            <p>
+              {t({
+                de: "Versuche es noch einmal, um deine Buchprojekte zu laden.",
+                en: "Try again to load your book projects.",
+              })}
+            </p>
+            <Button onClick={() => void loadBooks()}>
+              {t({ de: "Erneut versuchen", en: "Try again" })}
+            </Button>
+          </div>
+        ) : filteredBooks.length === 0 ? (
+          <div className="library-empty">
+            <span className="empty-icon">
+              {books.length ? <Search size={30} /> : <FeatherIcon />}
+            </span>
+            <h3>
+              {books.length
+                ? t({
+                    de: "Noch keine passende Geschichte.",
+                    en: "No matching stories yet.",
+                  })
+                : t({
+                    de: "Alles beginnt mit einer Idee.",
+                    en: "It all starts with an idea.",
+                  })}
+            </h3>
+            <p>
+              {books.length
+                ? t({
+                    de: "Probiere einen anderen Suchbegriff oder setze die Filter zurück.",
+                    en: "Try another search term or reset your filters.",
+                  })
+                : t({
+                    de: "Starte ein leeres Buch, entwickle deine Idee mit KI oder importiere dein Manuskript.",
+                    en: "Start a blank book, develop your idea with AI or import your manuscript.",
+                  })}
+            </p>
+            {books.length ? (
+              <Button variant="outline" onClick={resetFilters}>
+                {t({ de: "Filter zurücksetzen", en: "Reset filters" })}
+              </Button>
+            ) : (
+              <Link href="/books/new" className={buttonVariants()}>
+                <Plus size={17} />
+                {t({
+                  de: "Erstes Buch erstellen",
+                  en: "Create your first book",
+                })}
+              </Link>
+            )}
+          </div>
+        ) : (
+          <div className={cn(view === "grid" ? "book-grid" : "book-list")}>
+            {filteredBooks.map((book) => (
+              <article className="library-book" key={book.id}>
+                <Link
+                  className="book-open-link"
+                  href={`/books/${book.id}` as Route}
+                  aria-label={t(
+                    { de: "{{title}} öffnen", en: "Open {{title}}" },
+                    { title: book.title },
+                  )}
+                >
+                  <div className="book-art-stage">
+                    <BookCover
+                      title={book.title}
+                      genre={book.genre}
+                      coverUrl={book.coverUrl}
+                      decorative
+                    />
+                    <span className="book-open-indicator">
+                      <ArrowUpRight size={19} />
+                    </span>
+                  </div>
+                  <div className="book-details">
+                    <span className="book-genre">
+                      {book.genre ||
+                        t({ de: "Deine Geschichte", en: "Your story" })}
+                    </span>
+                    <h3>{book.title}</h3>
+                    <p>
+                      {book.description ||
+                        t({
+                          de: "Die nächste große Geschichte wartet auf dich.",
+                          en: "Your next great story is waiting for you.",
+                        })}
+                    </p>
+                    <div className="book-meta">
+                      <span>
+                        <FileText size={13} />
+                        {book._count.chapters}{" "}
+                        {t({ de: "Kapitel", en: "chapters" })}
+                      </span>
+                      <span>
+                        <Users size={13} />
+                        {book._count.characters}
+                      </span>
+                    </div>
+                    <div className="book-date">
+                      <time dateTime={book.updatedAt}>
+                        {new Date(book.updatedAt).toLocaleDateString(
+                          intlLocale,
+                          { day: "numeric", month: "short", year: "numeric" },
+                        )}
+                      </time>
+                      <ArrowRight size={16} />
+                    </div>
+                  </div>
+                </Link>
+                <button
+                  className="book-delete"
+                  aria-label={t(
+                    { de: "{{title}} löschen", en: "Delete {{title}}" },
+                    { title: book.title },
+                  )}
+                  onClick={() => setDeleteBook(book)}
+                >
+                  <Trash2 size={16} />
+                </button>
+              </article>
+            ))}
+            <Link href="/books/new" className="add-book-card">
+              <span>
+                <Plus size={25} />
+              </span>
+              <strong>
+                {t({
+                  de: "Platz für deine nächste Idee",
+                  en: "Room for your next idea",
+                })}
+              </strong>
+              <p>
+                {t({
+                  de: "Ein neues Kapitel beginnt mit dir.",
+                  en: "A new chapter starts with you.",
+                })}
+              </p>
+              <span className="add-book-action">
+                {t({ de: "Buch erstellen", en: "Create book" })}
+                <ArrowUpRight size={15} />
+              </span>
+            </Link>
+          </div>
+        )}
+      </section>
+      <footer className="library-footer">
+        <span>FORGE STUDIO</span>
+        <span>
+          {t({
+            de: "Für Geschichten, die bleiben.",
+            en: "For stories that stay.",
+          })}
+        </span>
+        <FeatherIcon />
+      </footer>
+      <Dialog
+        open={Boolean(deleteBook)}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) setDeleteBook(null);
+        }}
+      >
+        <DialogContent showCloseButton={!isDeleting}>
+          <DialogHeader>
+            <DialogTitle>
+              {t({ de: "Buchprojekt löschen?", en: "Delete book project?" })}
+            </DialogTitle>
+            <DialogDescription>
+              {t(
+                {
+                  de: "„{{title}}“ und alle zugehörigen Kapitel, Charaktere und Weltelemente werden unwiderruflich gelöscht.",
+                  en: "“{{title}}” and all its chapters, characters and world elements will be permanently deleted.",
+                },
+                { title: deleteBook?.title || "" },
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={isDeleting}
+              onClick={() => setDeleteBook(null)}
+            >
+              {t({ de: "Behalten", en: "Keep book" })}
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={isDeleting}
+              onClick={() => void handleDelete()}
+            >
+              {isDeleting ? <Loader2 className="animate-spin" /> : <Trash2 />}
+              {t({ de: "Endgültig löschen", en: "Permanently delete" })}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </main>
+  );
+}
+
+function FeatherIcon() {
+  return <BookOpen size={22} strokeWidth={1.5} />;
 }

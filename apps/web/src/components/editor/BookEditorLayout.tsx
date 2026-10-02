@@ -1,11 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
-import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
+import {
+  DragDropContext,
+  Droppable,
+  Draggable,
+  type DropResult,
+} from "@hello-pangea/dnd";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { BookCover } from "@/components/book-cover";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -27,7 +34,13 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import AISettingsForm from "@/components/editor/AISettingsForm";
 import CharacterForm from "@/components/editor/CharacterForm";
 import PlotPointForm from "@/components/editor/PlotPointForm";
@@ -152,29 +165,71 @@ type Props = {
   book: Book;
 };
 
-type Tab = "overview" | "chapters" | "characters" | "plot" | "world" | "preview" | "settings";
+type Tab =
+  | "overview"
+  | "chapters"
+  | "characters"
+  | "plot"
+  | "world"
+  | "preview"
+  | "settings";
 
 export default function BookEditorLayout({ book: initialBook }: Props) {
   const { t, intlLocale } = useI18n();
   const router = useRouter();
   const [book, setBook] = useState(initialBook);
-  const [activeTab, setActiveTab] = useState<Tab>("overview");
+  const [activeTab, setActiveTabState] = useState<Tab>("overview");
+  useEffect(() => {
+    const restoreTab = () => {
+      const tab = new URLSearchParams(window.location.search).get("tab");
+      if (
+        [
+          "overview",
+          "chapters",
+          "characters",
+          "plot",
+          "world",
+          "preview",
+          "settings",
+        ].includes(tab || "")
+      )
+        setActiveTabState(tab as Tab);
+      else setActiveTabState("overview");
+    };
+    restoreTab();
+    window.addEventListener("popstate", restoreTab);
+    return () => window.removeEventListener("popstate", restoreTab);
+  }, []);
+  const setActiveTab = (tab: Tab) => {
+    setActiveTabState(tab);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", tab);
+    window.history.replaceState(null, "", url);
+  };
 
   // Chapter state
   const [isCreatingChapter, setIsCreatingChapter] = useState(false);
 
   // Entity Editing State
   const [showCharacterForm, setShowCharacterForm] = useState(false);
-  const [editingCharacter, setEditingCharacter] = useState<Character | null>(null);
+  const [editingCharacter, setEditingCharacter] = useState<Character | null>(
+    null,
+  );
   const [showPlotForm, setShowPlotForm] = useState(false);
-  const [editingPlotPoint, setEditingPlotPoint] = useState<PlotPoint | null>(null);
+  const [editingPlotPoint, setEditingPlotPoint] = useState<PlotPoint | null>(
+    null,
+  );
   const [showWorldForm, setShowWorldForm] = useState(false);
-  const [editingWorldElement, setEditingWorldElement] = useState<WorldElement | null>(null);
+  const [editingWorldElement, setEditingWorldElement] =
+    useState<WorldElement | null>(null);
 
   // Character relationships state
-  const [characterViewMode, setCharacterViewMode] = useState<"cards" | "graph">("cards");
+  const [characterViewMode, setCharacterViewMode] = useState<"cards" | "graph">(
+    "cards",
+  );
   const [showRelationModal, setShowRelationModal] = useState(false);
-  const [editingRelationsCharacter, setEditingRelationsCharacter] = useState<CharacterWithRelations | null>(null);
+  const [editingRelationsCharacter, setEditingRelationsCharacter] =
+    useState<CharacterWithRelations | null>(null);
 
   const handleCharacterNodeClick = (characterId: string) => {
     const character = book.characters.find((c) => c.id === characterId);
@@ -197,9 +252,17 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
       if (response.ok) {
         const chapter = await response.json();
         router.push(`/books/${book.id}/chapter/${chapter.id}` as Route);
+      } else {
+        throw new Error("Create chapter failed");
       }
     } catch (error) {
       console.error("Error creating chapter:", error);
+      toast.error(
+        t({
+          de: "Kapitel konnte nicht erstellt werden.",
+          en: "Could not create chapter.",
+        }),
+      );
     } finally {
       setIsCreatingChapter(false);
     }
@@ -224,15 +287,22 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
 
     // Save to API
     try {
-      await fetch(`/api/books/${book.id}/chapters`, {
+      const response = await fetch(`/api/books/${book.id}/chapters`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           chapterIds: updatedChapters.map((ch) => ch.id),
         }),
       });
+      if (!response.ok) throw new Error("Reorder failed");
     } catch (error) {
       console.error("Error reordering chapters:", error);
+      toast.error(
+        t({
+          de: "Reihenfolge konnte nicht gespeichert werden.",
+          en: "Could not save chapter order.",
+        }),
+      );
       // Revert on error
       setBook((prev) => ({ ...prev, chapters: book.chapters }));
     }
@@ -242,7 +312,9 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
     if (editingCharacter) {
       setBook((prev) => ({
         ...prev,
-        characters: prev.characters.map((c) => (c.id === savedCharacter.id ? savedCharacter : c)),
+        characters: prev.characters.map((c) =>
+          c.id === savedCharacter.id ? savedCharacter : c,
+        ),
       }));
     } else {
       setBook((prev) => ({
@@ -255,17 +327,35 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
   };
 
   const handleCharacterDelete = async (characterId: string) => {
-    if (!confirm(t({ de: "Möchtest du diesen Charakter wirklich löschen?", en: "Do you really want to delete this character?" }))) return;
+    if (
+      !confirm(
+        t({
+          de: "Möchtest du diesen Charakter wirklich löschen?",
+          en: "Do you really want to delete this character?",
+        }),
+      )
+    )
+      return;
     try {
-      await fetch(`/api/books/${book.id}/characters/${characterId}`, {
-        method: "DELETE",
-      });
+      const response = await fetch(
+        `/api/books/${book.id}/characters/${characterId}`,
+        {
+          method: "DELETE",
+        },
+      );
+      if (!response.ok) throw new Error("Delete failed");
       setBook((prev) => ({
         ...prev,
         characters: prev.characters.filter((c) => c.id !== characterId),
       }));
     } catch (error) {
       console.error("Error deleting character:", error);
+      toast.error(
+        t({
+          de: "Löschen fehlgeschlagen. Bitte erneut versuchen.",
+          en: "Delete failed. Please try again.",
+        }),
+      );
     }
   };
 
@@ -273,7 +363,9 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
     if (editingPlotPoint) {
       setBook((prev) => ({
         ...prev,
-        plotPoints: prev.plotPoints.map((p) => (p.id === savedPlotPoint.id ? savedPlotPoint : p)),
+        plotPoints: prev.plotPoints.map((p) =>
+          p.id === savedPlotPoint.id ? savedPlotPoint : p,
+        ),
       }));
     } else {
       setBook((prev) => ({
@@ -286,17 +378,35 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
   };
 
   const handlePlotPointDelete = async (plotPointId: string) => {
-    if (!confirm(t({ de: "Möchtest du diesen Handlungspunkt wirklich löschen?", en: "Do you really want to delete this plot point?" }))) return;
+    if (
+      !confirm(
+        t({
+          de: "Möchtest du diesen Handlungspunkt wirklich löschen?",
+          en: "Do you really want to delete this plot point?",
+        }),
+      )
+    )
+      return;
     try {
-      await fetch(`/api/books/${book.id}/plot/${plotPointId}`, {
-        method: "DELETE",
-      });
+      const response = await fetch(
+        `/api/books/${book.id}/plot/${plotPointId}`,
+        {
+          method: "DELETE",
+        },
+      );
+      if (!response.ok) throw new Error("Delete failed");
       setBook((prev) => ({
         ...prev,
         plotPoints: prev.plotPoints.filter((p) => p.id !== plotPointId),
       }));
     } catch (error) {
       console.error("Error deleting plot point:", error);
+      toast.error(
+        t({
+          de: "Löschen fehlgeschlagen. Bitte erneut versuchen.",
+          en: "Delete failed. Please try again.",
+        }),
+      );
     }
   };
 
@@ -304,7 +414,9 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
     if (editingWorldElement) {
       setBook((prev) => ({
         ...prev,
-        worldElements: prev.worldElements.map((w) => (w.id === savedWorldElement.id ? savedWorldElement : w)),
+        worldElements: prev.worldElements.map((w) =>
+          w.id === savedWorldElement.id ? savedWorldElement : w,
+        ),
       }));
     } else {
       setBook((prev) => ({
@@ -317,28 +429,64 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
   };
 
   const handleWorldElementDelete = async (worldElementId: string) => {
-    if (!confirm(t({ de: "Möchtest du dieses Weltelement wirklich löschen?", en: "Do you really want to delete this world element?" }))) return;
+    if (
+      !confirm(
+        t({
+          de: "Möchtest du dieses Weltelement wirklich löschen?",
+          en: "Do you really want to delete this world element?",
+        }),
+      )
+    )
+      return;
     try {
-      await fetch(`/api/books/${book.id}/world/${worldElementId}`, {
-        method: "DELETE",
-      });
+      const response = await fetch(
+        `/api/books/${book.id}/world/${worldElementId}`,
+        {
+          method: "DELETE",
+        },
+      );
+      if (!response.ok) throw new Error("Delete failed");
       setBook((prev) => ({
         ...prev,
-        worldElements: prev.worldElements.filter((w) => w.id !== worldElementId),
+        worldElements: prev.worldElements.filter(
+          (w) => w.id !== worldElementId,
+        ),
       }));
     } catch (error) {
       console.error("Error deleting world element:", error);
+      toast.error(
+        t({
+          de: "Löschen fehlgeschlagen. Bitte erneut versuchen.",
+          en: "Delete failed. Please try again.",
+        }),
+      );
     }
   };
 
   const tabs: { id: Tab; label: string; icon: typeof BookOpen }[] = [
-    { id: "overview", label: t({ de: "Übersicht", en: "Overview" }), icon: BookOpen },
-    { id: "chapters", label: t({ de: "Kapitel", en: "Chapters" }), icon: FileText },
-    { id: "characters", label: t({ de: "Charaktere", en: "Characters" }), icon: Users },
+    {
+      id: "overview",
+      label: t({ de: "Übersicht", en: "Overview" }),
+      icon: BookOpen,
+    },
+    {
+      id: "chapters",
+      label: t({ de: "Kapitel", en: "Chapters" }),
+      icon: FileText,
+    },
+    {
+      id: "characters",
+      label: t({ de: "Charaktere", en: "Characters" }),
+      icon: Users,
+    },
     { id: "plot", label: t({ de: "Handlung", en: "Plot" }), icon: Map },
     { id: "world", label: t({ de: "Welt", en: "World" }), icon: Globe },
     { id: "preview", label: t({ de: "Vorschau", en: "Preview" }), icon: Eye },
-    { id: "settings", label: t({ de: "Einstellungen", en: "Settings" }), icon: Settings },
+    {
+      id: "settings",
+      label: t({ de: "Einstellungen", en: "Settings" }),
+      icon: Settings,
+    },
   ];
 
   const getStatusColor = (status: string) => {
@@ -368,63 +516,129 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      {/* Background Decorations */}
-      <div className="fixed inset-0 pointer-events-none z-0">
-        <div className="ambient-glow-amber top-[-10%] left-[-5%] opacity-20" />
-        <div className="ambient-glow-violet bottom-[-10%] right-[-5%] opacity-15" />
-      </div>
-
-      {/* Immersive Floating macOS-style Navigation Dock */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-2xl border border-border/40 bg-card/75 dark:bg-card/45 backdrop-blur-2xl shadow-2xl px-5 py-2.5 flex items-center gap-3 transition-all duration-300 hover:shadow-primary/10 hover:border-primary/30">
-        
-        {/* Link back to library */}
-        <Link 
-          href={"/books" as Route} 
-          className="p-2.5 rounded-xl text-muted-foreground hover:text-primary hover:bg-secondary/45 transition-all select-none group" 
-          title={t({ de: "Zurück zur Bibliothek", en: "Back to library" })}
-        >
-          <ArrowLeft className="h-4.5 w-4.5 group-hover:-translate-x-0.5 transition-transform" />
+    <div className="book-workspace">
+      <aside className="book-sidebar">
+        <Link href="/books" className="book-sidebar-back">
+          <ArrowLeft size={15} />
+          {t({ de: "Bibliothek", en: "Library" })}
         </Link>
-        <div className="w-px h-6 bg-border/40" />
-
-        {/* Dynamic workspace tab triggers with magnetic scale */}
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                "p-2.5 rounded-xl text-xs font-semibold font-serif transition-all duration-300 flex flex-col items-center justify-center gap-1 select-none relative cursor-pointer min-w-[56px] group",
-                isActive
-                  ? "text-primary scale-110 font-bold"
-                  : "text-muted-foreground hover:text-foreground hover:scale-105 hover:bg-secondary/45"
-              )}
-            >
-              <tab.icon className="h-4.5 w-4.5 transition-transform group-hover:scale-105" />
-              <span className="text-[9px] uppercase tracking-wider text-muted-foreground/80 scale-90 group-hover:scale-95 origin-center">{tab.label}</span>
-
-              {/* Active Golden Highlight Bar underneath */}
-              {isActive && (
-                <motion.div
-                  layoutId="active-dock-indicator"
-                  className="absolute -bottom-1 left-1/4 right-1/4 h-0.5 bg-primary rounded-full shadow-md shadow-primary/20 z-0 pointer-events-none"
-                  transition={{ type: "spring", stiffness: 100, damping: 15 }}
-                />
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Main Content */}
-      <main className="flex-1 overflow-auto relative z-10 scrollbar-hide pb-28">
-        <div className="relative p-8 md:p-10 max-w-6xl mx-auto min-h-screen">
+        <div className="book-sidebar-project">
+          <BookCover
+            title={book.title}
+            genre={book.genre}
+            coverUrl={book.coverUrl}
+            decorative
+          />
+          <div>
+            <span>
+              {book.genre || t({ de: "Buchprojekt", en: "Book project" })}
+            </span>
+            <h1>{book.title}</h1>
+            <p>
+              {book.author ||
+                t({ de: "Deine nächste Geschichte", en: "Your next story" })}
+            </p>
+          </div>
+        </div>
+        <div className="book-sidebar-search">
+          <GlobalSearch
+            bookId={book.id}
+            onNavigateToTab={(tab) => setActiveTab(tab as Tab)}
+          />
+        </div>
+        <span className="sidebar-eyebrow">STORY WORKSPACE</span>
+        <nav
+          className="book-tab-nav"
+          aria-label={t({ de: "Buchbereiche", en: "Book sections" })}
+        >
+          {tabs.map((tab) => {
+            const count =
+              tab.id === "chapters"
+                ? book.chapters.length
+                : tab.id === "characters"
+                  ? book.characters.length
+                  : tab.id === "plot"
+                    ? book.plotPoints.length
+                    : tab.id === "world"
+                      ? book.worldElements.length
+                      : null;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                aria-pressed={activeTab === tab.id}
+                className={cn(
+                  "book-tab-button",
+                  activeTab === tab.id && "active",
+                )}
+              >
+                <tab.icon size={17} />
+                <span>{tab.label}</span>
+                {count !== null && <small>{count}</small>}
+              </button>
+            );
+          })}
+        </nav>
+        <div className="book-sidebar-progress">
+          <span>
+            {t({ de: "Wörter im Manuskript", en: "Words in manuscript" })}
+          </span>
+          <strong>{totalWords.toLocaleString(intlLocale)}</strong>
+          <p>
+            {book.chapters.filter((ch) => ch.status === "completed").length} /{" "}
+            {book.chapters.length}{" "}
+            {t({ de: "Kapitel fertig", en: "chapters complete" })}
+          </p>
+          <div
+            className="manuscript-progress"
+            role="progressbar"
+            aria-label={t({
+              de: "Abgeschlossene Kapitel",
+              en: "Completed chapters",
+            })}
+            aria-valuemin={0}
+            aria-valuemax={Math.max(1, book.chapters.length)}
+            aria-valuenow={
+              book.chapters.filter((ch) => ch.status === "completed").length
+            }
+          >
+            <span
+              style={{
+                width: `${book.chapters.length ? (book.chapters.filter((ch) => ch.status === "completed").length / book.chapters.length) * 100 : 0}%`,
+              }}
+            />
+          </div>
+          <Button
+            onClick={handleCreateChapter}
+            disabled={isCreatingChapter}
+            className="w-full mt-5"
+          >
+            {isCreatingChapter ? (
+              <Loader2 className="animate-spin" />
+            ) : (
+              <Plus />
+            )}
+            {t({ de: "Neues Kapitel", en: "New chapter" })}
+          </Button>
+        </div>
+      </aside>
+      <main className="book-workspace-main">
+        <div className="book-workspace-topbar">
+          <span>
+            {book.title}
+            <span className="mx-2 text-muted-foreground">/</span>
+            <strong>{tabs.find((tab) => tab.id === activeTab)?.label}</strong>
+          </span>
+          <span className="book-workspace-mode">
+            <span className="status-dot" />
+            {t({ de: "Dein Schreibstudio", en: "Your writing studio" })}
+          </span>
+        </div>
+        <div className="book-workspace-panel">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
-              initial={{ opacity: 0, y: 10 }}
+              initial={false}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
@@ -451,15 +665,19 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
 
               {activeTab === "characters" && (
                 <div className="space-y-6">
-                  <div className="flex items-center justify-between border-b border-border/30 pb-4">
-                    <div className="flex items-center gap-4">
-                      <h2 className="text-3xl font-serif font-black tracking-tight text-foreground">{t({ de: "Charaktere", en: "Characters" })}</h2>
+                  <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border/30 pb-4">
+                    <div className="flex flex-wrap items-center gap-4">
+                      <h2 className="text-3xl font-sans font-black tracking-tight text-foreground">
+                        {t({ de: "Charaktere", en: "Characters" })}
+                      </h2>
                       <div className="flex items-center bg-secondary/50 rounded-xl p-1 border border-border/40">
                         <button
                           onClick={() => setCharacterViewMode("cards")}
                           className={cn(
                             "p-1.5 rounded-lg transition-all cursor-pointer",
-                            characterViewMode === "cards" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground",
+                            characterViewMode === "cards"
+                              ? "bg-background shadow-sm text-foreground"
+                              : "text-muted-foreground hover:text-foreground",
                           )}
                           title={t({ de: "Kartenansicht", en: "Card view" })}
                         >
@@ -469,33 +687,48 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
                           onClick={() => setCharacterViewMode("graph")}
                           className={cn(
                             "p-1.5 rounded-lg transition-all cursor-pointer",
-                            characterViewMode === "graph" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground",
+                            characterViewMode === "graph"
+                              ? "bg-background shadow-sm text-foreground"
+                              : "text-muted-foreground hover:text-foreground",
                           )}
-                          title={t({ de: "Beziehungs-Graph", en: "Relationship graph" })}
+                          title={t({
+                            de: "Beziehungs-Graph",
+                            en: "Relationship graph",
+                          })}
                         >
                           <GitBranch className="h-4 w-4" />
                         </button>
                       </div>
                     </div>
-                    <Button onClick={() => setShowCharacterForm(true)} className="rounded-xl shadow-md shadow-primary/10">
+                    <Button
+                      onClick={() => setShowCharacterForm(true)}
+                      className="rounded-xl shadow-md shadow-primary/10"
+                    >
                       <Plus className="mr-2 h-4 w-4" />
                       {t({ de: "Neuer Charakter", en: "New character" })}
                     </Button>
                   </div>
 
                   {/* AI Charakter Assistent */}
-                  <CharacterAIPanel bookId={book.id} onCharacterCreated={handleCharacterSave} onCharacterUpdated={handleCharacterSave} />
+                  <CharacterAIPanel
+                    bookId={book.id}
+                    onCharacterCreated={handleCharacterSave}
+                    onCharacterUpdated={handleCharacterSave}
+                  />
 
                   {characterViewMode === "graph" ? (
                     <Card className="h-[600px] overflow-hidden border border-border/40 shadow-inner bg-card/25 rounded-2xl">
-                      <CharacterRelationshipGraph characters={book.characters as any} onNodeClick={handleCharacterNodeClick} />
+                      <CharacterRelationshipGraph
+                        characters={book.characters as any}
+                        onNodeClick={handleCharacterNodeClick}
+                      />
                     </Card>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                       {book.characters.map((character) => (
                         <Card
                           key={character.id}
-                          className="group cursor-pointer hover:shadow-xl hover:shadow-primary/5 hover:border-primary/40 transition-all duration-300 overflow-hidden bg-card/50 backdrop-blur-sm border border-border/40 rounded-2xl flex flex-col justify-between paper-texture"
+                          className="group cursor-pointer hover:shadow-xl hover:shadow-primary/5 hover:border-primary/40 transition-all duration-300 overflow-hidden bg-card/50 backdrop-blur-sm border border-border/40 rounded-2xl flex flex-col justify-between "
                           onClick={() => {
                             setEditingCharacter(character);
                             setShowCharacterForm(true);
@@ -523,24 +756,37 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
 
                             <div className="flex-1 p-5 flex flex-col justify-between">
                               <div>
-                                <h3 className="font-serif font-black text-base group-hover:text-primary transition-colors text-foreground line-clamp-1">{character.name}</h3>
-                                <div className="text-[10px] font-bold tracking-wider uppercase text-muted-foreground mb-2.5">{character.role}</div>
-                                <p className="text-xs font-serif text-muted-foreground line-clamp-3 leading-relaxed">
-                                  {character.description || t({ de: "Keine Beschreibung", en: "No description" })}
+                                <h3 className="font-sans font-black text-base group-hover:text-primary transition-colors text-foreground line-clamp-1">
+                                  {character.name}
+                                </h3>
+                                <div className="text-[10px] font-bold tracking-wider uppercase text-muted-foreground mb-2.5">
+                                  {character.role}
+                                </div>
+                                <p className="text-xs font-sans text-muted-foreground line-clamp-3 leading-relaxed">
+                                  {character.description ||
+                                    t({
+                                      de: "Keine Beschreibung",
+                                      en: "No description",
+                                    })}
                                 </p>
                               </div>
 
-                              <div className="mt-4 pt-3 border-t border-border/30 flex gap-1.5 justify-end opacity-0 group-hover:opacity-100 transition-all transform translate-y-1.5 group-hover:translate-y-0">
+                              <div className="mt-4 pt-3 border-t border-border/30 flex gap-1.5 justify-end opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-all transform translate-y-1.5 group-hover:translate-y-0">
                                 <Button
                                   size="icon"
                                   variant="secondary"
                                   className="h-7.5 w-7.5 rounded-lg border border-border bg-card/95 hover:bg-secondary"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setEditingRelationsCharacter(character as any);
+                                    setEditingRelationsCharacter(
+                                      character as any,
+                                    );
                                     setShowRelationModal(true);
                                   }}
-                                  title={t({ de: "Beziehungen bearbeiten", en: "Edit relationships" })}
+                                  title={t({
+                                    de: "Beziehungen bearbeiten",
+                                    en: "Edit relationships",
+                                  })}
                                 >
                                   <Link2 className="h-3.5 w-3.5 text-muted-foreground" />
                                 </Button>
@@ -561,8 +807,13 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
                         </Card>
                       ))}
                       {book.characters.length === 0 && (
-                        <div className="col-span-full py-16 text-center rounded-2xl border border-dashed border-border/40 text-muted-foreground font-serif">
-                          <p>{t({ de: "Erstelle deinen ersten Charakter", en: "Create your first character" })}</p>
+                        <div className="col-span-full py-16 text-center rounded-2xl border border-dashed border-border/40 text-muted-foreground font-sans">
+                          <p>
+                            {t({
+                              de: "Erstelle deinen ersten Charakter",
+                              en: "Create your first character",
+                            })}
+                          </p>
                         </div>
                       )}
                     </div>
@@ -624,11 +875,18 @@ export default function BookEditorLayout({ book: initialBook }: Props) {
 
               {activeTab === "settings" && (
                 <div className="space-y-6 max-w-2xl mx-auto">
-                  <h2 className="text-2xl font-bold font-serif mb-6">{t({ de: "Buch & KI Einstellungen", en: "Book & AI settings" })}</h2>
+                  <h2 className="text-2xl font-bold font-sans mb-6">
+                    {t({
+                      de: "Buch & KI Einstellungen",
+                      en: "Book & AI settings",
+                    })}
+                  </h2>
                   <AISettingsForm
                     bookId={book.id}
                     initialSettings={book.aiSettings}
-                    onSave={(settings) => setBook((prev) => ({ ...prev, aiSettings: settings }))}
+                    onSave={(settings) =>
+                      setBook((prev) => ({ ...prev, aiSettings: settings }))
+                    }
                   />
                 </div>
               )}

@@ -1,3 +1,4 @@
+import { getTextStatistics } from "@/lib/text-statistics";
 import prisma from "@bucherstellung/db";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -71,9 +72,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
         // Calculate word count if content is provided
         let wordCount: number | undefined;
         if (content !== undefined) {
-            // Strip HTML tags and count words
-            const textContent = content.replace(/<[^>]*>/g, " ");
-            wordCount = textContent.split(/\s+/).filter((word: string) => word.length > 0).length;
+            wordCount = getTextStatistics(content).wordCount;
         }
 
         // Update chapter
@@ -88,6 +87,9 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
                 ...(wordCount !== undefined && { wordCount }),
             },
         });
+
+        // Keep the library's "recently updated" order in sync with manuscript edits.
+        await prisma.book.update({ where: { id: bookId }, data: { updatedAt: new Date() } });
 
         // Update character associations if provided
         if (characterIds !== undefined) {

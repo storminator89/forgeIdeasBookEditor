@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 
 import "../index.css";
 import Header from "@/components/header";
+import WorkspaceShell from "@/components/workspace-shell";
 import Providers from "@/components/providers";
 import { getRequestLocale } from "@/lib/locale";
 
@@ -27,8 +28,12 @@ const crimsonPro = Crimson_Pro({
 });
 
 export const metadata: Metadata = {
-  title: "bucherstellung",
-  description: "bucherstellung",
+  title: {
+    default: "Forge Studio · Dein Schreibstudio",
+    template: "%s · Forge Studio",
+  },
+  description:
+    "Von der ersten Idee zum fertigen Manuskript. Dein kreatives Schreibstudio für Bücher, Charaktere und Welten – mit KI an deiner Seite.",
 };
 
 export default async function RootLayout({
@@ -40,11 +45,14 @@ export default async function RootLayout({
 
   return (
     <html lang={locale} suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} ${crimsonPro.variable} antialiased`} suppressHydrationWarning>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} ${crimsonPro.variable} antialiased`}
+        suppressHydrationWarning
+      >
         <Providers initialLocale={locale}>
-          <div className="grid grid-rows-[auto_1fr] h-svh">
+          <div className="studio-app">
             <Header />
-            {children}
+            <WorkspaceShell>{children}</WorkspaceShell>
           </div>
         </Providers>
       </body>
