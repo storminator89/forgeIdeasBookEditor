@@ -1,0 +1,84 @@
+appId: com.forgeideas.bookeditor
+productName: Forge Ideas Book Editor
+copyright: Copyright (c) 2026
+
+directories:
+  output: ../../dist-installers
+  buildResources: resources
+
+# The main process is compiled to `dist/*.js` by `pnpm run build:electron`.
+files:
+  - dist/**/*
+  - package.json
+  - "!**/*.map"
+
+asar: true
+asarUnpack:
+  - "**/node_modules/@libsql/**"
+  - "**/node_modules/@prisma/**"
+  - "**/node_modules/.prisma/**"
+  - "**/node_modules/@img/**"
+  - "**/node_modules/@swc/**"
+
+# Everything Next.js needs at runtime: the standalone output (with all
+# patched node_modules), the Prisma schema (for `prisma db push` at
+# first run) and the build/static asset folder.
+extraResources:
+  - from: "build/web"
+    to: "web"
+    filter:
+      - "**/*"
+
+mac:
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+  category: public.app-category.productivity
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.plist
+  icon: resources/icon.png
+
+dmg:
+  title: "${productName}"
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: resources/icon.png
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Forge Ideas Book Editor
+
+linux:
+  target:
+    - AppImage
+    - deb
+  icon: resources/icon.png
+  category: Office
+  synopsis: "Buch-Editor mit KI-Unterstuetzung"
+  description: "Lokaler Buch-Editor mit KI-gestuetzter Textgenerierung."
+  desktop:
+    entry:
+      Name: Forge Ideas Book Editor
+      Comment: Buch-Editor mit KI-Unterstuetzung
+      Categories: Office;TextEditor;
+
+publish: null

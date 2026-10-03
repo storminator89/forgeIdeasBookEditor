@@ -59,3 +59,8 @@ local.db-journal
 *.db-journal
 *.sqlite
 *.sqlite-journal
+
+# Electron desktop
+apps/desktop/dist/
+apps/desktop/build/
+dist-installers/

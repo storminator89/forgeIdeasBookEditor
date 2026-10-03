@@ -43,8 +43,10 @@ export async function POST(request: NextRequest) {
         const buffer = Buffer.from(bytes);
         await writeFile(filepath, buffer);
 
-        // Return the URL
-        const url = `/uploads/${filename}`;
+        // Return the URL. We always serve uploads via the dedicated API
+        // route so that the desktop build (where the files live outside
+        // the web app's public/ directory) can stream them too.
+        const url = `/api/uploads/${filename}`;
 
         return NextResponse.json({ url, filename });
     } catch (error) {

@@ -1,0 +1,12 @@
+{
+  "extends": "@bucherstellung/config/tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "electron",
+    "noEmit": false,
+    "declaration": false,
+    "sourceMap": true
+  },
+  "include": ["electron/**/*.ts"],
+  "exclude": ["node_modules", "dist", "build"]
+}

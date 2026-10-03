@@ -1,0 +1,33 @@
+{
+  "name": "desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron desktop wrapper for the Forge Ideas Book Editor web app",
+  "main": "dist/main.js",
+  "scripts": {
+    "dev": "node scripts/dev.js",
+    "build:electron": "tsc -p tsconfig.json",
+    "build:web": "pnpm --filter web build",
+    "build:assemble": "tsx scripts/assemble.ts",
+    "build": "pnpm run build:web && pnpm run build:assemble && pnpm run build:electron",
+    "pack": "pnpm run build && electron-builder --dir",
+    "dist": "pnpm run build && electron-builder",
+    "dist:win": "pnpm run build && electron-builder --win",
+    "dist:mac": "pnpm run build && electron-builder --mac",
+    "dist:linux": "pnpm run build && electron-builder --linux"
+  },
+  "dependencies": {
+    "@bucherstellung/env": "workspace:*",
+    "dotenv": "catalog:",
+    "next": "^16.3.8"
+  },
+  "devDependencies": {
+    "@bucherstellung/config": "workspace:*",
+    "@types/node": "^22.13.14",
+    "electron": "^41.10.7",
+    "electron-builder": "^26.15.3",
+    "electron-builder-squirrel-windows": "^26.15.3",
+    "tsx": "^4.19.2",
+    "typescript": "catalog:"
+  }
+}
